@@ -1,0 +1,488 @@
+{
+  "meta": {
+    "generated_at": "2026-03-09T12:08:47",
+    "generated_by": "scripts/profile_source_data.py",
+    "raw_data_path": "raw_data",
+    "brd_version": "2.2",
+    "note": "Read this file before profiling source CSVs. Re-run only if source data changes."
+  },
+  "row_counts": {
+    "olist_customers_dataset.csv": 99441,
+    "olist_orders_dataset.csv": 99441,
+    "olist_order_items_dataset.csv": 112650,
+    "olist_order_payments_dataset.csv": 103886,
+    "olist_order_reviews_dataset.csv": 99224,
+    "olist_products_dataset.csv": 32951,
+    "olist_sellers_dataset.csv": 3095,
+    "olist_geolocation_dataset.csv": 1000163,
+    "product_category_name_translation.csv": 71
+  },
+  "columns": {
+    "customers": [
+      "customer_id",
+      "customer_unique_id",
+      "customer_zip_code_prefix",
+      "customer_city",
+      "customer_state"
+    ],
+    "orders": [
+      "order_id",
+      "customer_id",
+      "order_status",
+      "order_purchase_timestamp",
+      "order_approved_at",
+      "order_delivered_carrier_date",
+      "order_delivered_customer_date",
+      "order_estimated_delivery_date"
+    ],
+    "items": [
+      "order_id",
+      "order_item_id",
+      "product_id",
+      "seller_id",
+      "shipping_limit_date",
+      "price",
+      "freight_value"
+    ],
+    "payments": [
+      "order_id",
+      "payment_sequential",
+      "payment_type",
+      "payment_installments",
+      "payment_value"
+    ],
+    "reviews": [
+      "review_id",
+      "order_id",
+      "review_score",
+      "review_comment_title",
+      "review_comment_message",
+      "review_creation_date",
+      "review_answer_timestamp"
+    ],
+    "products": [
+      "product_id",
+      "product_category_name",
+      "product_name_lenght",
+      "product_description_lenght",
+      "product_photos_qty",
+      "product_weight_g",
+      "product_length_cm",
+      "product_height_cm",
+      "product_width_cm"
+    ],
+    "sellers": [
+      "seller_id",
+      "seller_zip_code_prefix",
+      "seller_city",
+      "seller_state"
+    ],
+    "geolocation": [
+      "geolocation_zip_code_prefix",
+      "geolocation_lat",
+      "geolocation_lng",
+      "geolocation_city",
+      "geolocation_state"
+    ],
+    "translation": [
+      "product_category_name",
+      "product_category_name_english"
+    ]
+  },
+  "nulls": {
+    "orders": {
+      "order_approved_at": 160,
+      "order_delivered_carrier_date": 1783,
+      "order_delivered_customer_date": 2965
+    },
+    "products": {
+      "product_category_name": 610,
+      "product_name_lenght": 610,
+      "product_description_lenght": 610,
+      "product_photos_qty": 610,
+      "product_weight_g": 2,
+      "product_length_cm": 2,
+      "product_height_cm": 2,
+      "product_width_cm": 2
+    },
+    "reviews": {
+      "review_comment_title": 87656,
+      "review_comment_message": 58247
+    },
+    "items": {}
+  },
+  "orders": {
+    "total_orders": 99441,
+    "distinct_customer_ids": 99441,
+    "order_status_distribution": {
+      "delivered": 96478,
+      "shipped": 1107,
+      "canceled": 625,
+      "unavailable": 609,
+      "invoiced": 314,
+      "processing": 301,
+      "created": 5,
+      "approved": 2
+    },
+    "null_approved_at": 160,
+    "null_delivered_carrier": 1783,
+    "null_delivered_customer": 2965
+  },
+  "customers": {
+    "total_rows": 99441,
+    "distinct_customer_unique_id": 96096,
+    "distinct_customer_id": 99441,
+    "customers_with_multiple_orders": 2997,
+    "max_orders_per_customer": 17,
+    "bad_zip_format": 0,
+    "top_10_states": {
+      "SP": 41746,
+      "RJ": 12852,
+      "MG": 11635,
+      "RS": 5466,
+      "PR": 5045,
+      "SC": 3637,
+      "BA": 3380,
+      "DF": 2140,
+      "ES": 2033,
+      "GO": 2020
+    }
+  },
+  "order_items": {
+    "total_rows": 112650,
+    "distinct_order_ids": 98666,
+    "orders_with_multiple_items": 9803,
+    "max_items_per_order": 21,
+    "price": {
+      "min": 0.85,
+      "max": 6735.0,
+      "zero_or_below": 0
+    },
+    "freight": {
+      "min": 0.0,
+      "max": 409.68,
+      "negative": 0
+    }
+  },
+  "payments": {
+    "total_rows": 103886,
+    "payment_type_distribution": {
+      "credit_card": 76795,
+      "boleto": 19784,
+      "voucher": 5775,
+      "debit_card": 1529,
+      "not_defined": 3
+    },
+    "orders_with_multiple_payments": 2961,
+    "installments": {
+      "min": 0,
+      "max": 24,
+      "zero_installment_rows": 2,
+      "zero_installment_types": {
+        "credit_card": 2
+      }
+    },
+    "boleto_installment_distribution": {
+      "1": 19784
+    },
+    "payment_value": {
+      "min": 0.0,
+      "max": 13664.08,
+      "zero_value_total": 9,
+      "zero_value_excl_not_defined": 6,
+      "zero_value_excl_not_defined_types": {
+        "voucher": 6
+      },
+      "negative_value_rows": 0
+    },
+    "not_defined_rows": [
+      {
+        "order_id": "4637ca194b6387e2d538dc89b124b0ee",
+        "payment_value": "0.00",
+        "payment_installments": "1"
+      },
+      {
+        "order_id": "00b1cb0320190ca0daa2c88b35206009",
+        "payment_value": "0.00",
+        "payment_installments": "1"
+      },
+      {
+        "order_id": "c8c528189310eaa44a745b8d9d26908b",
+        "payment_value": "0.00",
+        "payment_installments": "1"
+      }
+    ]
+  },
+  "reviews": {
+    "total_rows": 99224,
+    "duplicate_review_ids": 789,
+    "orders_with_multiple_reviews": 547,
+    "max_reviews_per_order": 3,
+    "review_score_distribution": {
+      "5": 57328,
+      "4": 19142,
+      "1": 11424,
+      "3": 8179,
+      "2": 3151
+    },
+    "null_review_comment_title": 87656,
+    "null_review_comment_message": 58247,
+    "null_comment_title_pct": 0.8834,
+    "null_comment_message_pct": 0.587,
+    "itemless_orders_with_reviews": 756
+  },
+  "products": {
+    "total_rows": 32951,
+    "columns": [
+      "product_id",
+      "product_category_name",
+      "product_name_lenght",
+      "product_description_lenght",
+      "product_photos_qty",
+      "product_weight_g",
+      "product_length_cm",
+      "product_height_cm",
+      "product_width_cm"
+    ],
+    "misspelled_columns": [
+      "product_name_lenght",
+      "product_description_lenght"
+    ],
+    "corrected_columns": [
+      "product_name_length",
+      "product_description_length"
+    ],
+    "null_product_category": 610,
+    "distinct_categories": 73,
+    "translation_entries": 71,
+    "untranslated_categories": [
+      "pc_gamer",
+      "portateis_cozinha_e_preparadores_de_alimentos"
+    ],
+    "translation_file_bom": true
+  },
+  "sellers": {
+    "total_rows": 3095,
+    "bad_zip_format": 0
+  },
+  "geolocation": {
+    "total_rows": 1000163,
+    "distinct_zip_prefixes": 19015,
+    "max_rows_per_prefix": 1146,
+    "avg_rows_per_prefix": 52.6,
+    "lat_range": {
+      "min": -36.6053744107061,
+      "max": 45.06593318269697
+    },
+    "lng_range": {
+      "min": -101.46676644931476,
+      "max": 121.10539381057764
+    },
+    "brazil_bounds": {
+      "lat_min": -35,
+      "lat_max": 5,
+      "lng_min": -75,
+      "lng_max": -34
+    },
+    "outlier_lat_rows": 29,
+    "outlier_lng_rows": 37,
+    "customer_zip_match": {
+      "distinct_zips_total": 14994,
+      "distinct_zips_matched": 14837,
+      "match_pct": 0.9895,
+      "row_match_pct": 0.9972
+    },
+    "seller_zip_match": {
+      "distinct_zips_total": 2246,
+      "distinct_zips_matched": 2239,
+      "match_pct": 0.9969,
+      "row_match_pct": 0.9977
+    }
+  },
+  "cross_table_integrity": {
+    "orders_with_no_items": {
+      "count": 775,
+      "status_breakdown": {
+        "unavailable": 603,
+        "canceled": 164,
+        "created": 5,
+        "invoiced": 2,
+        "shipped": 1
+      }
+    },
+    "orders_with_no_payment": 1,
+    "items_order_ids_not_in_orders": 0,
+    "payment_order_ids_not_in_orders": 0,
+    "customer_ids_not_in_customers": 0,
+    "seller_ids_not_in_sellers": 0,
+    "itemless_orders_with_reviews": 756
+  },
+  "known_defects": [
+    {
+      "id": "DEF-001",
+      "table": "olist_order_reviews_dataset.csv",
+      "description": "789 duplicate review_id values; 547 orders have multiple reviews (max 3)",
+      "staging_fix": "stg_reviews: ROW_NUMBER() OVER (PARTITION BY review_id ORDER BY review_answer_timestamp DESC), keep rn=1",
+      "brd_ref": "REQ-052.1"
+    },
+    {
+      "id": "DEF-002",
+      "table": "olist_geolocation_dataset.csv",
+      "description": "Coordinate outliers: 29 lat rows outside [-35, 5]; 37 lng rows outside [-75, -34]",
+      "staging_fix": "stg_geolocation: WHERE lat BETWEEN -35 AND 5 AND lng BETWEEN -75 AND -34 before AVG()",
+      "brd_ref": "REQ-054.1"
+    },
+    {
+      "id": "DEF-003",
+      "table": "olist_products_dataset.csv",
+      "description": "2 categories have no English translation: ['pc_gamer', 'portateis_cozinha_e_preparadores_de_alimentos']. 610 products have null category_name.",
+      "staging_fix": "stg_products: COALESCE(english_name, portuguese_name, 'uncategorized')",
+      "brd_ref": "REQ-006.1"
+    },
+    {
+      "id": "DEF-004",
+      "table": "olist_order_payments_dataset.csv",
+      "description": "3 rows with payment_type='not_defined', all payment_value=0.00",
+      "staging_fix": "stg_payments: filter WHERE payment_type != 'not_defined'",
+      "brd_ref": "REQ-017.1"
+    },
+    {
+      "id": "DEF-005",
+      "table": "olist_order_payments_dataset.csv",
+      "description": "2 credit_card rows with payment_installments=0 (invalid)",
+      "staging_fix": "stg_payments: GREATEST(payment_installments, 1)",
+      "brd_ref": "REQ-017.1"
+    },
+    {
+      "id": "DEF-006",
+      "table": "olist_order_payments_dataset.csv",
+      "description": "6 zero-value voucher payments (sequential 3, 4, 13, 14) \u2014 legitimate secondary payments",
+      "staging_fix": "No fix needed. payment_value >= 0 test (not strictly > 0).",
+      "brd_ref": "REQ-017.1"
+    },
+    {
+      "id": "DEF-007",
+      "table": "product_category_name_translation.csv",
+      "description": "File contains UTF-8 BOM. First column may read as '\\ufeffproduct_category_name' depending on tap encoding.",
+      "staging_fix": "Verify Meltano tap strips BOM, or pre-strip file before ingestion.",
+      "brd_ref": "REQ-001.2"
+    },
+    {
+      "id": "DEF-008",
+      "table": "olist_orders_dataset.csv / olist_order_items_dataset.csv",
+      "description": "775 orders have no order_items rows (603 unavailable, 164 canceled, 5 created, 2 invoiced, 1 shipped). 756 of these have review records.",
+      "staging_fix": "Expected behaviour. fct_sales is item-granularity; itemless orders absent from fct_sales by design. fct_reviews.order_id links to stg_orders, not fct_sales.",
+      "brd_ref": "REQ-011.1, REQ-052.1"
+    },
+    {
+      "id": "DEF-009",
+      "table": "olist_products_dataset.csv",
+      "description": "Misspelled column names: 'product_name_lenght', 'product_description_lenght'",
+      "staging_fix": "stg_products: rename to product_name_length, product_description_length",
+      "brd_ref": "REQ-006.1"
+    }
+  ],
+  "test_thresholds": {
+    "fct_reviews.review_comment_title": {
+      "mostly": 0.08,
+      "null_pct_in_source": 0.8834,
+      "rationale": "88.3% null (11.7% non-null). Threshold 0.08 catches genuine degradation with margin."
+    },
+    "fct_reviews.review_comment_message": {
+      "mostly": 0.4,
+      "null_pct_in_source": 0.587,
+      "rationale": "58.7% null (41.3% non-null). Threshold 0.40 matches actual fill rate."
+    },
+    "dim_customers.geolocation_lat_lng": {
+      "mostly": 0.97,
+      "row_match_pct_in_source": 0.9972,
+      "rationale": "99.7% row-level geo match. Threshold 0.97 gives meaningful signal on join quality degradation."
+    },
+    "dim_sellers.geolocation_lat_lng": {
+      "mostly": 0.97,
+      "row_match_pct_in_source": 0.9977,
+      "rationale": "99.8% row-level geo match. Same rationale as dim_customers."
+    },
+    "fct_sales.row_count": {
+      "min": 90000,
+      "max": 200000,
+      "actual_items_rows": 112650,
+      "rationale": "112,650 order_items rows. Min 90k detects catastrophic partial load; max 200k allows for future growth."
+    }
+  },
+  "monthly_distribution": {
+    "note": "Computed from olist_orders_dataset.csv order_purchase_timestamp. Query run 2026-03-10.",
+    "date_range": {
+      "min": "2016-09-04",
+      "max": "2018-10-17"
+    },
+    "counts": {
+      "2016-09": 4,
+      "2016-10": 324,
+      "2016-11": 0,
+      "2016-12": 1,
+      "2017-01": 800,
+      "2017-02": 1780,
+      "2017-03": 2682,
+      "2017-04": 2404,
+      "2017-05": 3700,
+      "2017-06": 3245,
+      "2017-07": 4026,
+      "2017-08": 4331,
+      "2017-09": 4285,
+      "2017-10": 4631,
+      "2017-11": 7544,
+      "2017-12": 5673,
+      "2018-01": 7269,
+      "2018-02": 6728,
+      "2018-03": 7211,
+      "2018-04": 6939,
+      "2018-05": 6873,
+      "2018-06": 6167,
+      "2018-07": 6292,
+      "2018-08": 6512,
+      "2018-09": 16,
+      "2018-10": 4
+    },
+    "observations": [
+      "2016-11 has zero orders — complete gap at platform launch; exclude from all trend analyses",
+      "2016-09 (4 orders), 2016-12 (1 order): platform launch sparsity; not representative",
+      "Meaningful data begins 2017-01 (800 orders, start of consistent ramp-up)",
+      "Stable plateau: 2018-01 through 2018-08 averaging ~6,748 orders/month",
+      "Peak: 2017-11 (7,544 orders) — Brazilian Black Friday effect",
+      "2018-09 (16 orders) and 2018-10 (4 orders): >99% drop from plateau — data cut artefact, not real activity",
+      "MAX(order_purchase_timestamp) = 2018-10-17 is misleading as RFM reference date due to tail artefact"
+    ],
+    "recommended_observation_window": {
+      "start": "2017-01-01",
+      "end": "2018-08-31",
+      "months": 20,
+      "rationale": "20 months of complete, representative data. Excludes launch sparsity (2016) and data cut artefact (2018-09/10). Use for all trend analyses and seasonality work."
+    }
+  },
+  "rfm_reference": {
+    "reference_date": "2018-08-31",
+    "rationale": "Last day of August 2018 — the last complete month. August has 6,512 orders, consistent with the 6,100-7,300 stable plateau. September 2018 drops to 16 orders (data cut artefact). Using MAX(order_purchase_timestamp) = 2018-10-17 would inflate Recency scores for 20 artefact records and misrepresent customer behaviour.",
+    "do_not_use": "CURRENT_DATE or MAX(order_purchase_timestamp) — both produce incorrect Recency scores for historical analysis",
+    "scoring": {
+      "recency": "Quintile-based (1-5). Days since last order_purchase_timestamp relative to 2018-08-31. Lower days = higher score (5 = most recent).",
+      "frequency": "3-tier only. F1 = 1 order, F2 = 2 orders, F3 = 3+ orders. Standard quintile not used — 93,099 of 96,096 customers (96.9%) have exactly 1 order; quintile bins would be degenerate.",
+      "monetary": "Quintile-based (1-5). SUM(total_sale_amount) per customer_unique_id. Higher spend = higher score."
+    },
+    "repeat_purchase_rate": {
+      "single_purchase_customers": 93099,
+      "total_customers": 96096,
+      "rate_pct": 96.88,
+      "note": "Surface as standalone metric 'marketplace stickiness rate'. Expected finding: Olist has strong acquisition but low channel retention — customers return to sellers through competing marketplaces."
+    },
+    "named_segments": {
+      "Champions": "R4-5, F3, M4-5",
+      "Loyal": "R3-5, F2-3, M3-5",
+      "Promising": "R4-5, F1, M2-4",
+      "At Risk": "R2-3, F2-3, M3-5",
+      "High Value Lost": "R1-2, F1-2, M4-5",
+      "Hibernating": "R1-2, F1, M1-2"
+    },
+    "brd_ref": "ASMP-022, ASMP-025, REQ-055.1"
+  }
+}

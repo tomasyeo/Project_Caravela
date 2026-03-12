@@ -1,0 +1,6 @@
+# Changelog — Project Caravela
+# REQ-037.2: Record all ad hoc changes and deviations during implementation.
+# Format: Date | Component | Change | Reason
+
+| 2026-03-11 | `date_key` type | Confirmed `DATE` type for `dim_date.date_key` and all FK references in `fct_sales`, `fct_payments`, `fct_reviews` | `dbt_utils.date_spine` produces DATE natively — no extra casting in `dim_date`. Staging models cast source timestamps via `DATE(CAST(... AS TIMESTAMP))`. Same-type FK joins across all fact tables. INTEGER (YYYYMMDD) would require additional casting in both `dim_date` and staging with no BigQuery benefit. REQ-008.1 Open Item (3) and REQ-017.1 blocking flag closed. |
+| 2026-03-11 | BigQuery datasets | Renamed `raw` → `olist_raw`; `analytics` → `olist_analytics` | `raw` is a reserved word in BigQuery standard SQL. Using it as a dataset name requires backtick-quoting in every generated query; the dbt BigQuery adapter handles this in some versions but not all — behaviour is version-dependent and not documented as a guarantee. Renaming eliminates the ambiguity at zero cost pre-implementation. Affects: `meltano.yml` target dataset config, `dbt_project.yml`, `sources.yml`, Dagster `DbtProject` config, `scripts/generate_parquet.py` (default `--dataset` argument), notebooks. BRD updated to v2.6; REQ-003.1 Open Item 2 closed. |
