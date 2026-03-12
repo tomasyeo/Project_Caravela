@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Caravela — Pipeline Run Guide</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --border: #2d3148;
+    --text: #e2e8f0; --muted: #8892a4; --code-bg: #12151f;
+    --blue: #60a5fa; --green: #34d399; --yellow: #fbbf24;
+    --red: #f87171; --purple: #a78bfa; --orange: #fb923c;
+    --phase1: #3b82f6; --phase2a: #8b5cf6; --phase2b: #10b981;
+    --phase3: #f59e0b; --phase4: #ec4899;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.7; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+  .sidebar { position: fixed; top: 0; left: 0; width: 220px; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 24px 0; font-size: 13px; }
+  .sidebar-title { padding: 0 20px 16px; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .sidebar a { display: block; padding: 5px 20px; color: var(--muted); transition: color .15s; }
+  .sidebar a:hover { color: var(--text); text-decoration: none; }
+  .sidebar .phase-label { padding: 10px 20px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  @media (max-width: 900px) { .sidebar { display: none; } .container { margin: 0; } }
+  .main { margin-left: 220px; }
+  @media (max-width: 900px) { .main { margin-left: 0; } }
+
+  /* Typography */
+  h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 700; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; color: var(--blue); }
+  h4 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  p { margin-bottom: 14px; color: var(--text); }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; background: var(--code-bg); padding: 2px 6px; border-radius: 4px; color: var(--orange); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 12px 0 20px; overflow-x: auto; }
+  pre code { background: none; padding: 0; color: var(--text); font-size: 13px; line-height: 1.6; }
+
+  /* Header */
+  .page-header { background: linear-gradient(135deg, #1e2a4a 0%, #1a1d27 100%); border-bottom: 1px solid var(--border); padding: 40px 40px 32px; margin-bottom: 0; }
+  .page-header .subtitle { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: 8px; vertical-align: middle; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
+  .card-title { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+
+  /* Callouts */
+  .callout { border-radius: 8px; padding: 14px 18px; margin: 16px 0; border-left: 4px solid; }
+  .callout-warn  { background: #2d2400; border-color: var(--yellow); }
+  .callout-danger{ background: #2d1212; border-color: var(--red); }
+  .callout-info  { background: #0d1f3c; border-color: var(--blue); }
+  .callout-ok    { background: #0d2b1f; border-color: var(--green); }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+  .callout-warn strong  { color: var(--yellow); }
+  .callout-danger strong{ color: var(--red); }
+  .callout-info strong  { color: var(--blue); }
+  .callout-ok strong    { color: var(--green); }
+
+  /* Phase headers */
+  .phase { border-radius: 10px; padding: 18px 22px; margin: 32px 0 20px; color: white; }
+  .phase h2 { border: none; margin: 0 0 4px; padding: 0; font-size: 18px; color: white; }
+  .phase p { margin: 0; font-size: 13px; opacity: .85; color: white; }
+  .phase-1  { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+  .phase-2a { background: linear-gradient(135deg, #6d28d9, #7c3aed); }
+  .phase-2b { background: linear-gradient(135deg, #047857, #059669); }
+  .phase-3  { background: linear-gradient(135deg, #b45309, #d97706); }
+  .phase-4  { background: linear-gradient(135deg, #9d174d, #db2777); }
+
+  /* Agent block */
+  .agent-block { border: 1px solid var(--border); border-radius: 10px; margin: 20px 0; overflow: hidden; }
+  .agent-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+  .agent-id { font-size: 13px; font-weight: 700; background: rgba(0,0,0,.3); padding: 3px 10px; border-radius: 20px; }
+  .agent-title { font-weight: 600; }
+  .agent-model { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .agent-body { padding: 16px 20px; border-top: 1px solid var(--border); }
+
+  /* Checklist */
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 5px 0 5px 28px; position: relative; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before { content: '□'; position: absolute; left: 6px; color: var(--muted); }
+
+  /* Review table */
+  .review-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .review-table th { text-align: left; padding: 8px 12px; background: var(--code-bg); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .review-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .ok { color: var(--green); font-weight: 600; }
+  .warn { color: var(--yellow); }
+  .danger { color: var(--red); font-weight: 600; }
+
+  /* Step indicator */
+  .step { display: flex; gap: 16px; margin: 12px 0; }
+  .step-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .step-content { flex: 1; }
+  .step-content p { margin-bottom: 6px; }
+
+  /* Separator */
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-title">Pipeline Guide</div>
+  <a href="#overview">Overview</a>
+  <a href="#before-you-start">Before You Start</a>
+  <a href="#precheck">Step 0 — Pre-check</a>
+  <div class="phase-label" style="color:#60a5fa">Phase 1 — Data Engineering</div>
+  <a href="#agent-1a">Agent 1a — Meltano</a>
+  <a href="#agent-1b">Agent 1b — Staging</a>
+  <a href="#agent-1c">Agent 1c — Marts</a>
+  <a href="#agent-1d">Agent 1d — Tests</a>
+  <div class="phase-label" style="color:#a78bfa">Phase 2 — Platform</div>
+  <a href="#agent-2">Agent 2 — Dagster</a>
+  <div class="phase-label" style="color:#34d399">Phase 2 — Analytics</div>
+  <a href="#agent-3">Agent 3 — Notebooks</a>
+  <div class="phase-label" style="color:#fbbf24">Phase 3 — Dashboard</div>
+  <a href="#agent-4">Agent 4 — Streamlit</a>
+  <div class="phase-label" style="color:#f472b6">Phase 4 — Brief</div>
+  <a href="#agent-5">Agent 5 — Exec Brief</a>
+  <a href="#cleanup">Final Cleanup</a>
+  <a href="#troubleshooting">Troubleshooting</a>
+</nav>
+
+<div class="main">
+<div class="page-header">
+  <h1>Project Caravela</h1>
+  <div style="font-size:22px; font-weight:700; color:#60a5fa; margin:4px 0">Pipeline Run Guide</div>
+  <div class="subtitle">Multi-agent implementation guide — interactive mode</div>
+</div>
+
+<div class="container">
+
+<!-- ── OVERVIEW ─────────────────────────────────────────────────────────────── -->
+<h2 id="overview">Overview</h2>
+<p>This guide walks you through running the full Project Caravela data pipeline using 8 sequential/parallel agent invocations. You act as the human orchestrator — reviewing each agent's output before committing and proceeding.</p>
+
+<div class="card">
+  <div class="card-title">Pipeline Architecture</div>
+  <pre><code>Phase 1 (sequential):  1a Meltano → 1b Staging → 1c Marts → 1d Tests
+                                                                    ↓
+Phase 2 (parallel):                              2 Dagster ‖ 3 Notebooks
+                                                                    ↓ (Agent 3 done)
+Phase 3:                                                    4 Dashboard
+                                                                    ↓
+Phase 4:                                                    5 Exec Brief
+                                                                    ↓
+                                                          Final Cleanup</code></pre>
+</div>
+
+<div class="card">
+  <div class="card-title">Script Reference</div>
+  <table class="review-table">
+    <tr><th>Script</th><th>Purpose</th><th>When to run</th></tr>
+    <tr><td><code>scripts/precheck.sh</code></td><td>Verify all prerequisites</td><td>Once, before Agent 1a</td></tr>
+    <tr><td><code>scripts/launch_agent.sh &lt;id&gt;</code></td><td>Open interactive Claude session</td><td>Before each agent</td></tr>
+    <tr><td><code>scripts/wrap_up_agent.sh &lt;id&gt;</code></td><td>Commit, merge, prep next worktree</td><td>After approving each agent</td></tr>
+    <tr><td><code>scripts/final_cleanup.sh</code></td><td>Remove worktrees, verify deliverables, push</td><td>After all agents complete</td></tr>
+  </table>
+</div>
+
+<!-- ── BEFORE YOU START ──────────────────────────────────────────────────────── -->
+<h2 id="before-you-start">Before You Start</h2>
+
+<h3>1. GCP Service Account</h3>
+<p>Create a service account with these roles:</p>
+<ul>
+  <li><strong>BigQuery Data Editor</strong></li>
+  <li><strong>BigQuery Job User</strong></li>
+</ul>
+<p>Download the JSON key and store it somewhere safe (e.g. <code>~/.gcp/caravela-sa.json</code>).</p>
+
+<h3>2. Set Environment Variables</h3>
+<p>Add these to your shell profile (<code>~/.zshrc</code>) or export before each session:</p>
+<pre><code>export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.gcp/caravela-sa.json"
+export GCP_PROJECT_ID="your-gcp-project-id"</code></pre>
+
+<h3>3. Activate conda environment</h3>
+<pre><code>conda activate assignment2</code></pre>
+
+<h3>4. Create BigQuery datasets (one-time)</h3>
+<pre><code>bq mk --dataset $GCP_PROJECT_ID:olist_raw
+bq mk --dataset $GCP_PROJECT_ID:olist_analytics</code></pre>
+<p>Or use the <code>--create-datasets</code> flag in the pre-check script.</p>
+
+<div class="callout callout-warn">
+  <strong>⚠ Quota Warning</strong>
+  The pipeline runs 8 agent sessions. Each session consumes API tokens. If your weekly quota runs out mid-agent, the session will end. The git history and <code>progress.md</code> are your recovery points — they survive session loss. When quota refreshes, re-run the agent that was interrupted (all dbt models are idempotent).
+</div>
+
+<!-- ── STEP 0 PRE-CHECK ───────────────────────────────────────────────────────── -->
+<h2 id="precheck">Step 0 — Pre-flight Check</h2>
+<pre><code>./scripts/precheck.sh --project $GCP_PROJECT_ID --create-datasets</code></pre>
+<p>This verifies all 7 prerequisites and creates the BigQuery datasets if missing. All checks must pass before running Agent 1a.</p>
+
+<table class="review-table">
+  <tr><th>Check</th><th>What it verifies</th></tr>
+  <tr><td>CLI tools</td><td><code>claude</code>, <code>bq</code>, <code>git</code>, <code>dbt</code>, <code>meltano</code> are in PATH</td></tr>
+  <tr><td>Credentials</td><td>GOOGLE_APPLICATION_CREDENTIALS is set and the file exists</td></tr>
+  <tr><td>GCP_PROJECT_ID</td><td>Environment variable is set</td></tr>
+  <tr><td>BigQuery datasets</td><td>olist_raw and olist_analytics exist in the project</td></tr>
+  <tr><td>Source CSVs</td><td>Exactly 9 CSVs in <code>raw_data/</code></td></tr>
+  <tr><td>Directives</td><td>Exactly 9 files in <code>directives/</code></td></tr>
+  <tr><td>Runtime dirs</td><td><code>logs/</code> and <code>worktrees/</code> exist</td></tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>ℹ dbt and manifest.json warnings are expected at this stage</strong>
+  The pre-check will warn that <code>dbt/packages.yml</code> is missing and <code>manifest.json</code> doesn't exist. These are created by Agents 1b and 1d respectively. The warnings are informational — they do not block Agent 1a.
+</div>
+
+<hr>
+
+<!-- ══ PHASE 1 ═══════════════════════════════════════════════════════════════ -->
+<div class="phase phase-1">
+  <h2>Phase 1 — Data Engineering</h2>
+  <p>Agents 1a → 1b → 1c → 1d run sequentially in the same worktree (<code>worktrees/agent-1</code>). Wrap up and approve each before launching the next.</p>
+</div>
+
+<!-- Agent 1a -->
+<div class="agent-block" id="agent-1a">
+  <div class="agent-header" style="background:#1d3461">
+    <span class="agent-id">1a</span>
+    <span class="agent-title">Meltano Configuration</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes <code>meltano/meltano.yml</code> with all 9 source CSV streams configured for <code>tap-spreadsheets-anywhere</code> → <code>target-bigquery</code>. Runs <code>meltano install</code> to verify plugins install.</p>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 1a</code></pre>
+
+    <h4>What to review before wrapping up</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Where to look</th><th>Pass / Fail</th></tr>
+      <tr><td>All 9 stream_names present</td><td><code>meltano/meltano.yml</code></td><td class="ok">Must match exactly</td></tr>
+      <tr><td><code>product_category_name_translation</code> has <code>encoding: utf-8-sig</code></td><td><code>meltano.yml</code></td><td class="danger">Critical — missing = null categories</td></tr>
+      <tr><td><code>write_disposition: WRITE_TRUNCATE</code></td><td><code>meltano.yml</code> target config</td><td class="danger">Critical — WRITE_APPEND duplicates rows</td></tr>
+      <tr><td>Both <code>pip_url</code> include <code>setuptools&lt;70</code></td><td><code>meltano.yml</code> plugins section</td><td class="danger">Critical — v81 breaks install</td></tr>
+      <tr><td>Relative path <code>../raw_data/</code> used</td><td><code>meltano.yml</code> stream configs</td><td class="warn">Absolute paths break on other machines</td></tr>
+      <tr><td><code>meltano install</code> passed</td><td>Agent session output</td><td class="ok">Must pass</td></tr>
+      <tr><td>No hardcoded project IDs</td><td><code>meltano.yml</code></td><td class="ok">Use env var interpolation</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 1a</code></pre>
+  </div>
+</div>
+
+<!-- Agent 1b -->
+<div class="agent-block" id="agent-1b">
+  <div class="agent-header" style="background:#1d3461">
+    <span class="agent-id">1b</span>
+    <span class="agent-title">Staging Models</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes 9 staging models, <code>sources.yml</code>, <code>dbt_project.yml</code>, <code>packages.yml</code>, and <code>profiles.yml</code>. Runs <code>dbt deps</code> and <code>dbt parse</code>.</p>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 1b</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td><code>sources.yml</code> table names match 9 stream_names</td><td>Character-for-character identical</td><td class="danger">Critical cascade</td></tr>
+      <tr><td><code>stg_payments</code>: <code>not_defined</code> rows filtered</td><td>WHERE payment_type != 'not_defined'</td><td class="warn">Test will fail otherwise</td></tr>
+      <tr><td><code>stg_payments</code>: 0-installment clamped to 1</td><td>GREATEST(installments, 1)</td><td class="warn">Boleto test will fail otherwise</td></tr>
+      <tr><td><code>stg_reviews</code>: ROW_NUMBER dedup on review_id</td><td>789 duplicate review_ids in source</td><td class="warn">fct_reviews PK test fails without this</td></tr>
+      <tr><td><code>stg_geolocation</code>: bounding-box filter before AVG</td><td>lat BETWEEN -35 AND 5, lng BETWEEN -75 AND -34</td><td class="warn">Coordinate outliers corrupt AVG</td></tr>
+      <tr><td><code>stg_products</code>: column renames applied</td><td><code>product_name_lenght</code> → <code>product_name_length</code></td><td class="warn">Downstream references break silently</td></tr>
+      <tr><td><code>stg_products</code>: COALESCE for category name</td><td>COALESCE(english, portuguese, 'uncategorized')</td><td class="ok">610 null-category products</td></tr>
+      <tr><td><code>dbt parse</code> passes</td><td>No warehouse connection needed</td><td class="danger">Required for Dagster</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 1b</code></pre>
+  </div>
+</div>
+
+<!-- Agent 1c -->
+<div class="agent-block" id="agent-1c">
+  <div class="agent-header" style="background:#1d3461">
+    <span class="agent-id">1c</span>
+    <span class="agent-title">Mart Models</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes 7 mart models: <code>dim_customers</code>, <code>dim_products</code>, <code>dim_sellers</code>, <code>dim_date</code>, <code>fct_sales</code>, <code>fct_reviews</code>, <code>fct_payments</code>.</p>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 1c</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td><code>fct_sales</code>: three-source CTE</td><td>order_items → orders → customers (not direct join)</td><td class="danger">Direct join produces null customer_unique_id silently</td></tr>
+      <tr><td><code>fct_sales</code>: no <code>order_payment_value</code></td><td>This column is intentionally excluded</td><td class="warn">Causes double-counting</td></tr>
+      <tr><td><code>fct_reviews.order_id</code> FK targets <code>stg_orders</code></td><td>NOT fct_sales — 756 itemless orders</td><td class="danger">FK test fails if targeting wrong table</td></tr>
+      <tr><td><code>fct_payments</code>: explicit <code>ref('stg_orders')</code> CTE</td><td>For date_key — not in stg_payments</td><td class="warn">dbt DAG loses lineage without it</td></tr>
+      <tr><td><code>dim_date</code>: uses <code>dbt_utils.date_spine</code></td><td>Range 2016-01-01 to 2018-12-31</td><td class="ok">date_key is DATE type</td></tr>
+      <tr><td>All mart models reference only staging via <code>ref()</code></td><td>No direct <code>source()</code> calls</td><td class="warn">Breaks lineage</td></tr>
+      <tr><td><code>dbt compile</code> passes</td><td>All 7 models compile</td><td class="danger">Required before tests</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 1c</code></pre>
+  </div>
+</div>
+
+<!-- Agent 1d -->
+<div class="agent-block" id="agent-1d">
+  <div class="agent-header" style="background:#1d3461">
+    <span class="agent-id">1d</span>
+    <span class="agent-title">dbt Tests</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes <code>schema.yml</code> for staging and marts, 3 singular tests, and runs <code>dbt build</code> against live BigQuery. This is the first agent that requires a real BigQuery connection.</p>
+
+    <div class="callout callout-warn">
+      <strong>⚠ This agent runs dbt build against live BigQuery</strong>
+      Meltano must have already loaded data into olist_raw (or the agent will need to run meltano first). If olist_raw tables are empty, dbt tests will fail with "table not found" — not a code error.
+    </div>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 1d</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td><code>dbt build</code> passes 0 failures</td><td>Both run and test pass</td><td class="danger">Gate to all downstream agents</td></tr>
+      <tr><td><code>fct_reviews.order_id</code> relationship test targets <code>stg_orders</code></td><td>Not fct_sales</td><td class="danger">Test will fail if pointing to wrong table</td></tr>
+      <tr><td><code>fct_reviews</code> row count: 95,000–100,000</td><td>Guard against wrong dedup logic</td><td class="warn">If count is ~96k-789, dedup used wrong column</td></tr>
+      <tr><td>Boleto singular test passes</td><td>Zero rows returned</td><td class="warn">stg_payments clamp must be working</td></tr>
+      <tr><td>payment_value test uses <code>&gt;=0</code> not <code>&gt;0</code></td><td>Zero-value vouchers are valid</td><td class="warn">Would fail on valid rows</td></tr>
+      <tr><td><code>manifest.json</code> generated</td><td>Check <code>dbt/target/manifest.json</code> exists</td><td class="danger">Required for Dagster</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 1d</code></pre>
+    <p>This creates <strong>both</strong> <code>worktrees/agent-2</code> and <code>worktrees/agent-3</code> — ready for parallel execution.</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- ══ PHASE 2 ═══════════════════════════════════════════════════════════════ -->
+<div class="phase phase-2a" style="margin-bottom:12px">
+  <h2>Phase 2a — Platform Engineering</h2>
+  <p>Agent 2 and Agent 3 run in parallel. Open two terminal windows.</p>
+</div>
+
+<!-- Agent 2 -->
+<div class="agent-block" id="agent-2">
+  <div class="agent-header" style="background:#2d1b69">
+    <span class="agent-id">2</span>
+    <span class="agent-title">Platform Engineer — Dagster</span>
+    <span class="agent-model">claude-sonnet-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes the complete Dagster project: asset definitions, Meltano shell asset, dbt asset graph from <code>manifest.json</code>, daily 09:00 SGT schedule, and resource config.</p>
+
+    <h4>Launch (Terminal 1)</h4>
+    <pre><code>./scripts/launch_agent.sh 2</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td><code>dagster dev</code> starts without errors</td><td>Run manually to verify</td><td class="danger">Main success criterion</td></tr>
+      <tr><td>Asset graph shows meltano_ingest → staging → marts</td><td>Check Dagster UI at localhost:3000</td><td class="danger">Wrong AssetKey prefix breaks lineage</td></tr>
+      <tr><td>All 9 RAW_TABLES AssetKeys use prefix <code>["olist_raw", ...]</code></td><td>Must match sources.yml source name</td><td class="warn">Edge disappears if prefix wrong</td></tr>
+      <tr><td>Schedule is <code>0 9 * * *</code> with <code>Asia/Singapore</code></td><td><code>dagster/dagster_project/schedules.py</code></td><td class="ok">Not UTC — explicit timezone</td></tr>
+      <tr><td><code>manifest.json</code> path uses <code>Path(__file__)</code></td><td>Not a relative string</td><td class="warn">Breaks if dagster dev run from wrong dir</td></tr>
+      <tr><td>No <code>PartitionsDefinition</code> on any asset</td><td>Historical dataset — no partitions needed</td><td class="warn">WRITE_TRUNCATE + partitions = conflict</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 2</code></pre>
+    <div class="callout callout-info">
+      <strong>ℹ Agent 2 wrap-up does not unlock Agent 4</strong>
+      Agent 4 is gated on Agent 3 only. Wrap up Agent 2 at any time after it completes — it does not block anything.
+    </div>
+  </div>
+</div>
+
+<div class="phase phase-2b" style="margin-top:24px; margin-bottom:12px">
+  <h2>Phase 2b — Analytics Engineering</h2>
+  <p>Runs in parallel with Agent 2. Requires live BigQuery (olist_analytics populated by Agent 1d).</p>
+</div>
+
+<!-- Agent 3 -->
+<div class="agent-block" id="agent-3">
+  <div class="agent-header" style="background:#064e3b">
+    <span class="agent-id">3</span>
+    <span class="agent-title">Analytics Engineer — Notebooks &amp; Parquet</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes 4 Jupyter notebooks covering 11 metrics, updates <code>notebooks/utils.py</code>, and exports 5 Parquet files to <code>data/</code>.</p>
+
+    <div class="callout callout-danger">
+      <strong>🔴 Agent 3 is the longest-running agent</strong>
+      Running 4 notebooks against BigQuery + exporting Parquet takes significant time and API tokens. This is the most likely agent to exhaust weekly quota. Consider running it in a session with quota headroom.
+    </div>
+
+    <h4>Launch (Terminal 2)</h4>
+    <pre><code>./scripts/launch_agent.sh 3</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td>All 5 Parquet files exist and load</td><td><code>pd.read_parquet("data/sales_orders.parquet")</code></td><td class="danger">Agent 4 cannot proceed without these</td></tr>
+      <tr><td><code>notebooks/utils.py</code> imports cleanly</td><td><code>python -c "from notebooks.utils import *"</code></td><td class="danger">Single point of failure — all pages import it</td></tr>
+      <tr><td>RFM reference date is <code>2018-08-31</code></td><td>NOT CURRENT_DATE or MAX(timestamp)</td><td class="warn">Wrong date = wrong segments</td></tr>
+      <tr><td><code>geo_delivery.parquet</code> has <code>year</code>/<code>month</code> columns</td><td>Required for date range filter in dashboard</td><td class="warn">Filter silently does nothing without these</td></tr>
+      <tr><td><code>seller_performance.parquet</code> has no date dimension</td><td>Full-period data — expected</td><td class="ok">Dashboard shows static label</td></tr>
+      <tr><td>Delivery metrics use <code>COUNT(DISTINCT order_id)</code></td><td>Timestamps repeat across item rows</td><td class="warn">Inflated counts otherwise</td></tr>
+      <tr><td>Data cut exclusions applied</td><td>Exclude 2018-09, 2018-10, 2016-11, 2016-12 from trend charts</td><td class="ok">Artefact data</td></tr>
+    </table>
+
+    <h4>Wrap up (unlocks Agent 4)</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 3</code></pre>
+  </div>
+</div>
+
+<hr>
+
+<!-- ══ PHASE 3 ═══════════════════════════════════════════════════════════════ -->
+<div class="phase phase-3">
+  <h2>Phase 3 — Dashboard</h2>
+  <p>Runs after Agent 3 wraps up. Requires Parquet files in <code>data/</code>.</p>
+</div>
+
+<!-- Agent 4 -->
+<div class="agent-block" id="agent-4">
+  <div class="agent-header" style="background:#451a03">
+    <span class="agent-id">4</span>
+    <span class="agent-title">Dashboard Engineer — Streamlit</span>
+    <span class="agent-model">claude-sonnet-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Writes <code>dashboard.py</code> (thin entry point), <code>dashboard_utils.py</code> (loaders + filter init), and all 4 page files.</p>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 4</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td><code>streamlit run dashboard.py</code> starts clean</td><td>No import errors</td><td class="danger">Main success criterion</td></tr>
+      <tr><td><code>dashboard.py</code> has ONLY page config + <code>st.navigation()</code></td><td>No data loading or charts</td><td class="warn">Architecture violation</td></tr>
+      <tr><td><code>init_filters()</code> called at top of every page</td><td>All 4 pages</td><td class="warn">Filter state breaks if missing</td></tr>
+      <tr><td>All charts use Parquet, not BigQuery</td><td>Grep for <code>bigquery</code> in pages/</td><td class="danger">Dashboard must work offline</td></tr>
+      <tr><td>Choropleth uses <code>featureidkey="properties.sigla"</code></td><td>Confirmed against brazil_states.geojson</td><td class="danger">Wrong key = blank map</td></tr>
+      <tr><td>RFM section shows <code>st.caption()</code> for inapplicable filters</td><td>Date Range + Product Category not applicable</td><td class="ok">Filters visible but noted</td></tr>
+      <tr><td>No raw stack traces in UI</td><td>Errors wrapped in <code>st.error()</code></td><td class="ok">User experience</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 4</code></pre>
+  </div>
+</div>
+
+<hr>
+
+<!-- ══ PHASE 4 ═══════════════════════════════════════════════════════════════ -->
+<div class="phase phase-4">
+  <h2>Phase 4 — Executive Brief</h2>
+  <p>Final agent. Synthesizes all analytical findings into the executive brief document.</p>
+</div>
+
+<!-- Agent 5 -->
+<div class="agent-block" id="agent-5">
+  <div class="agent-header" style="background:#500724">
+    <span class="agent-id">5</span>
+    <span class="agent-title">Data Scientist — Executive Brief</span>
+    <span class="agent-model">claude-opus-4-6</span>
+  </div>
+  <div class="agent-body">
+    <h4>What the agent does</h4>
+    <p>Reads the 3 analytical notebooks and Parquet files, then writes <code>docs/executive_brief.md</code> — a 1,500–2,500 word narrative document structured for NotebookLM slide generation.</p>
+
+    <h4>Launch</h4>
+    <pre><code>./scripts/launch_agent.sh 5</code></pre>
+
+    <h4>What to review</h4>
+    <table class="review-table">
+      <tr><th>Check</th><th>Detail</th><th>Risk</th></tr>
+      <tr><td>Word count 1,500–2,500</td><td><code>wc -w docs/executive_brief.md</code></td><td class="warn">Outside range = thin or bloated</td></tr>
+      <tr><td>All 9 section headers present</td><td>Executive Summary through Appendix</td><td class="ok">NotebookLM structure</td></tr>
+      <tr><td>All 11 metrics referenced with figures</td><td>Specific numbers, not vague statements</td><td class="warn">Vague = low-quality slides</td></tr>
+      <tr><td>At least 1 technical risk in Section 7</td><td>With mitigation</td><td class="ok">Required by REQ-041.1</td></tr>
+      <tr><td>No fabricated figures</td><td>All numbers sourced from notebooks/Parquet</td><td class="danger">Accuracy risk</td></tr>
+      <tr><td>Tone is executive-appropriate</td><td>No dbt/BigQuery jargon in body</td><td class="ok">Audience fit</td></tr>
+    </table>
+
+    <h4>Wrap up</h4>
+    <pre><code>./scripts/wrap_up_agent.sh 5</code></pre>
+  </div>
+</div>
+
+<hr>
+
+<!-- ── FINAL CLEANUP ──────────────────────────────────────────────────────────── -->
+<h2 id="cleanup">Final Cleanup</h2>
+<pre><code>./scripts/final_cleanup.sh</code></pre>
+<p>This script:</p>
+<ul>
+  <li>Verifies all 8 agents are committed to main</li>
+  <li>Checks all deliverables exist at expected paths</li>
+  <li>Removes all 5 git worktrees</li>
+  <li>Offers to push to GitHub</li>
+</ul>
+
+<h3>After cleanup — verify the full stack</h3>
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-content">
+    <p><strong>Run the dashboard</strong></p>
+    <pre><code>streamlit run dashboard.py</code></pre>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-content">
+    <p><strong>Run dbt docs</strong></p>
+    <pre><code>cd dbt && dbt docs generate && dbt docs serve</code></pre>
+    <p>Browse to <code>http://localhost:8080</code> for interactive DAG and schema explorer.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-content">
+    <p><strong>Verify Dagster UI</strong></p>
+    <pre><code>cd dbt && dbt parse && cd .. && dagster dev</code></pre>
+    <p>Browse to <code>http://localhost:3000</code>. Confirm asset graph shows full lineage.</p>
+  </div>
+</div>
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-content">
+    <p><strong>Update progress.md</strong> — mark remaining REQs as complete.</p>
+  </div>
+</div>
+
+<hr>
+
+<!-- ── TROUBLESHOOTING ────────────────────────────────────────────────────────── -->
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3>meltano install fails</h3>
+<div class="callout callout-danger">
+  <strong>Symptom:</strong> <code>pkg_resources</code> ImportError during <code>meltano install</code>
+</div>
+<p><strong>Cause:</strong> setuptools v81 removed <code>pkg_resources</code>.</p>
+<p><strong>Fix:</strong> Ensure both <code>pip_url</code> entries in <code>meltano.yml</code> include <code>setuptools&lt;70</code>. If <code>meltano install</code> was already run without the fix, delete <code>.meltano/</code> and re-run:</p>
+<pre><code>rm -rf meltano/.meltano
+cd meltano && meltano install</code></pre>
+
+<h3>dbt build: table not found in olist_raw</h3>
+<div class="callout callout-warn">
+  <strong>Symptom:</strong> dbt models fail with "Table not found" when referencing olist_raw tables
+</div>
+<p><strong>Cause:</strong> Meltano has not been run yet — olist_raw tables don't exist.</p>
+<p><strong>Fix:</strong> Run Meltano first to load the source data, then re-run dbt build:</p>
+<pre><code>cd meltano && meltano run tap-spreadsheets-anywhere target-bigquery</code></pre>
+<p>Note: the geolocation load (1M rows) takes several minutes. Do not interrupt.</p>
+
+<h3>dagster dev fails: manifest.json not found</h3>
+<div class="callout callout-warn">
+  <strong>Symptom:</strong> <code>FileNotFoundError: manifest.json</code> on <code>dagster dev</code>
+</div>
+<p><strong>Fix:</strong> Run <code>dbt parse</code> first (no BigQuery connection needed):</p>
+<pre><code>cd dbt && dbt parse</code></pre>
+
+<h3>Choropleth map is blank</h3>
+<div class="callout callout-warn">
+  <strong>Symptom:</strong> Geographic choropleth renders with no fill colours
+</div>
+<p><strong>Most likely cause:</strong> <code>featureidkey</code> is wrong. Must be <code>properties.sigla</code>.</p>
+<p><strong>Check:</strong> Confirm the <code>locations</code> column contains 2-letter state codes (e.g. <code>SP</code>, <code>RJ</code>) — not full names.</p>
+
+<h3>Agent quota exhaustion mid-session</h3>
+<div class="callout callout-info">
+  <strong>What happened:</strong> The Claude session ended unexpectedly due to API quota limits.
+</div>
+<p><strong>Recovery steps:</strong></p>
+<ol>
+  <li>Check <code>git log --oneline</code> to see what was committed before the session ended</li>
+  <li>Check <code>worktrees/agent-X/</code> for any uncommitted partial work</li>
+  <li>When quota refreshes, re-run <code>./scripts/launch_agent.sh &lt;id&gt;</code> for the interrupted agent</li>
+  <li>All dbt models are idempotent — re-running overwrites cleanly</li>
+</ol>
+
+<h3>git merge conflict on wrap-up</h3>
+<div class="callout callout-danger">
+  <strong>Symptom:</strong> <code>wrap_up_agent.sh</code> fails with merge conflict
+</div>
+<p><strong>Most likely cause:</strong> Two parallel agents (2 and 3) both modified a shared file (unlikely by design, but possible if an agent strayed outside its directory).</p>
+<p><strong>Fix:</strong> Resolve manually in the worktree:</p>
+<pre><code>cd worktrees/agent-2  # or agent-3
+git status            # see conflicting files
+# resolve conflicts manually
+git add -A
+git commit -m "Resolve merge conflict"
+cd ../..
+git merge worktrees/agent-2</code></pre>
+
+<h3>notebooks/utils.py import fails</h3>
+<div class="callout callout-danger">
+  <strong>Symptom:</strong> Dashboard or generate_parquet.py fails with ImportError on utils
+</div>
+<p><strong>Fix:</strong> Run from repo root (not from notebooks/):</p>
+<pre><code>cd /path/to/Project_Caravela
+python -c "from notebooks.utils import *"</code></pre>
+<p>If the import still fails, check that <code>notebooks/__init__.py</code> exists (create an empty one if missing).</p>
+
+</div><!-- /container -->
+</div><!-- /main -->
+</body>
+</html>
