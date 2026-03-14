@@ -35,9 +35,9 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-004.1 | dbt project scaffolded; `packages.yml` with dbt-expectations + dbt_utils | Data Engineer | not started | — | — | Run `dbt deps` after scaffold |
-| REQ-011.1 | 9 staging models — all raw columns cast from STRING in staging | Data Engineer | not started | REQ-004.1 | — | ASMP-028: tap loads all cols as STRING |
-| REQ-012.1 | dbt lineage complete — all 9 tables in `sources.yml` | Data Engineer | not started | REQ-011.1 | — | `stg_products` dual-source; `sources.yml` must list both |
+| REQ-004.1 | dbt project scaffolded; `packages.yml` with dbt-expectations + dbt_utils | Data Engineer | complete | — | — | `dbt_project.yml`, `packages.yml`, `profiles.yml` created. `dbt deps` installed dbt_utils 1.3.3, dbt_expectations 0.10.4. |
+| REQ-011.1 | 9 staging models — all raw columns cast from STRING in staging | Data Engineer | complete | — | Yes | All 9 staging models created. `sources.yml` uses `_view` suffix (upstream deviation). `stg_products` uses `product_category_name_english` not `string_field_1`. See changelog 2026-03-14. |
+| REQ-012.1 | dbt lineage complete — all 9 tables in `sources.yml` | Data Engineer | complete | — | Yes | 9 sources declared with `_view` suffix. `stg_products` dual-source (both `olist_products_dataset_view` and `product_category_name_translation_view`). `dbt parse` + `dbt compile` succeed (manifest.json generated). |
 
 ---
 
