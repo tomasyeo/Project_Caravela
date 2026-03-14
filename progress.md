@@ -25,8 +25,8 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-001.2 | Meltano pipeline configured: `tap-spreadsheets-anywhere` → `target-bigquery` | Data Engineer | not started | REQ-003.1 (credentials) | — | All open items closed. BOM → `encoding: utf-8-sig`. Table names + `WRITE_TRUNCATE` → ASMP-001. ADR-004 created. |
-| REQ-002.1 | All 9 source CSVs loaded to `olist_raw` | Data Engineer | not started | REQ-001.2 | — | — |
+| REQ-001.2 | Meltano pipeline configured: `tap-csv` → `target-bigquery` | Data Engineer | complete | — | Yes | Deviated from spec: `tap-csv` instead of `tap-spreadsheets-anywhere`; `batch_job` method; `_view` suffix on BQ table names. See changelog 2026-03-14 entries. |
+| REQ-002.1 | All 9 source CSVs loaded to `olist_raw` | Data Engineer | complete | — | Yes | All 9 tables + 9 flat-column views in `olist_raw`. dbt must query `*_view` tables. See changelog. |
 | REQ-003.1 | BigQuery datasets pre-created; `GOOGLE_APPLICATION_CREDENTIALS` provisioned | Platform Engineer | not started | — | — | **Pre-implementation blocker** — credentials must be provisioned before any pipeline stage runs. Platform Engineer to coordinate with team. |
 
 ---

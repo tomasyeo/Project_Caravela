@@ -1,0 +1,57 @@
+default_environment: dev
+project_id: 019ce32b-04eb-7dfc-9d9e-27bdd97cfc93
+environments:
+- name: dev
+- name: staging
+- name: prod
+send_anonymous_usage_stats: false
+
+plugins:
+  extractors:
+  - name: tap-csv
+    variant: meltanolabs
+    pip_url: git+https://github.com/MeltanoLabs/tap-csv.git setuptools<70
+    config:
+      # Increasing sample_rate helps the tap guess types more accurately
+      sample_rate: 1000 
+      files:
+      - entity: olist_customers_dataset
+        path: ../raw_data/olist_customers_dataset.csv
+        keys: [customer_id] # Added keys for better downstream modeling
+      - entity: olist_orders_dataset
+        path: ../raw_data/olist_orders_dataset.csv
+        keys: [order_id]
+      - entity: olist_order_items_dataset
+        path: ../raw_data/olist_order_items_dataset.csv
+        keys: [order_id, order_item_id]
+      - entity: olist_order_payments_dataset
+        path: ../raw_data/olist_order_payments_dataset.csv
+        keys: [order_id, payment_sequential]
+      - entity: olist_order_reviews_dataset
+        path: ../raw_data/olist_order_reviews_dataset.csv
+        keys: [review_id]
+      - entity: olist_products_dataset
+        path: ../raw_data/olist_products_dataset.csv
+        keys: [product_id]
+      - entity: olist_sellers_dataset
+        path: ../raw_data/olist_sellers_dataset.csv
+        keys: [seller_id]
+      - entity: olist_geolocation_dataset
+        path: ../raw_data/olist_geolocation_dataset.csv
+        keys: [geolocation_zip_code_prefix]
+      - entity: product_category_name_translation
+        path: ../raw_data/product_category_name_translation.csv
+        keys: [product_category_name]
+
+  loaders:
+  - name: target-bigquery
+    variant: z3z1ma
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git setuptools<70
+    config:
+      project: $GCP_PROJECT_ID
+      credentials_path: $GOOGLE_APPLICATION_CREDENTIALS
+      dataset: olist_raw
+      method: batch_job
+      denormalized: false
+      generate_view: true
+      write_disposition: WRITE_TRUNCATE
