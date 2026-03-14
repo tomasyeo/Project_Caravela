@@ -58,8 +58,10 @@ info "Directive: directives/$DIRECTIVE"
 # ── Verify prerequisite agents are wrapped up ──────────────────────────────────
 check_agent_committed() {
   local agent_label="$1"
-  git -C "$REPO_ROOT" log --oneline | grep -q "$agent_label" \
-    || abort "Agent $agent_label does not appear committed to main yet. Run wrap_up_agent.sh first."
+  local count
+  count=$(git -C "$REPO_ROOT" log --oneline --grep="$agent_label" | wc -l | tr -d ' ')
+  [[ "$count" -gt 0 ]] \
+    || abort "$agent_label does not appear committed to main yet. Run wrap_up_agent.sh first."
 }
 
 case "$AGENT_ID" in
@@ -73,12 +75,12 @@ esac
 
 # ── Worktree setup ─────────────────────────────────────────────────────────────
 if [[ -d "$WORKTREE_PATH" ]]; then
-  info "Worktree exists — pulling latest main..."
-  git -C "$WORKTREE_PATH" pull origin main --quiet \
-    || warn "git pull failed — worktree may be ahead of origin. Continuing."
+  info "Worktree exists — syncing to latest main..."
+  git -C "$WORKTREE_PATH" reset --hard main --quiet \
+    || warn "git reset failed — worktree may have uncommitted changes. Continuing."
 else
   info "Creating worktree at worktrees/$WORKTREE..."
-  git -C "$REPO_ROOT" worktree add "$WORKTREE_PATH" main --quiet
+  git -C "$REPO_ROOT" worktree add --detach "$WORKTREE_PATH" --quiet
   info "Worktree created."
 fi
 

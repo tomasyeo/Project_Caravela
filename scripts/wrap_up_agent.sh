@@ -87,7 +87,8 @@ git commit -m "$LABEL" \
 header "Merging into main"
 
 cd "$REPO_ROOT"
-git merge "$WORKTREE_PATH" --no-edit \
+WORKTREE_HEAD=$(git -C "$WORKTREE_PATH" rev-parse HEAD)
+git merge "$WORKTREE_HEAD" --no-edit \
   && pass "Merged worktrees/$WORKTREE → main" \
   || abort "git merge failed — resolve conflicts in $WORKTREE_PATH then re-run"
 
@@ -96,13 +97,13 @@ prep_worktree() {
   local next_worktree="$1"
   local next_path="$REPO_ROOT/worktrees/$next_worktree"
   if [[ -d "$next_path" ]]; then
-    info "Pulling latest main into worktrees/$next_worktree..."
-    git -C "$next_path" pull origin main --quiet \
+    info "Syncing worktrees/$next_worktree to latest main..."
+    git -C "$next_path" reset --hard main --quiet \
       && pass "worktrees/$next_worktree is up to date" \
-      || warn "git pull failed for worktrees/$next_worktree — check manually"
+      || warn "git reset failed for worktrees/$next_worktree — check manually"
   else
     info "Creating worktrees/$next_worktree from main..."
-    git worktree add "$next_path" main --quiet \
+    git worktree add --detach "$next_path" --quiet \
       && pass "worktrees/$next_worktree created" \
       || warn "Failed to create worktrees/$next_worktree — launch_agent.sh will retry"
   fi
