@@ -45,15 +45,15 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-005.1 | `dim_customers` — PK: `customer_unique_id`; city, state, zip, lat, lng | Data Engineer | not started | REQ-011.1 | — | lat/lng from `stg_geolocation`; nullable where no match |
-| REQ-006.1 | `dim_products` — PK: `product_id`; COALESCE English/Portuguese/uncategorized | Data Engineer | not started | REQ-011.1 | — | 2 untranslated categories; 610 null-category products |
-| REQ-007.1 | `dim_date` — PK: `date_key DATE`; generated via `dbt_utils.date_spine` | Data Engineer | not started | REQ-004.1 | — | Range: 2016-01-01 to 2018-12-31. See ADR-001 |
-| REQ-051.1 | `dim_sellers` — PK: `seller_id`; city, state, zip, lat, lng | Data Engineer | not started | REQ-011.1 | — | lat/lng from `stg_geolocation`; nullable where no match |
-| REQ-008.1 | `fct_sales` — order-item granularity; FKs to all 4 dims | Data Engineer | not started | REQ-005.1; REQ-006.1; REQ-007.1; REQ-051.1 | — | `customer_unique_id` via three-source CTE; delivery timestamps nullable |
-| REQ-052.1 | `fct_reviews` — deduplicated on `review_id`; FK: `order_id` → `stg_orders` | Data Engineer | not started | REQ-011.1 | — | 789 dup review_ids; `order_id` NOT unique in fct_reviews. See ADR-003 |
-| REQ-053.1 | `fct_payments` — compound key (`order_id`, `payment_sequential`) | Data Engineer | not started | REQ-011.1 | — | `date_key` from `stg_orders`; requires explicit `ref('stg_orders')` |
-| REQ-054.1 | `stg_geolocation` — Brazil bounding-box filter; AVG() lat/lng per zip | Data Engineer | not started | REQ-011.1 | — | Filter: lat -35–5, lng -75– -34 before AVG |
-| REQ-013.1 | `total_sale_amount` = price + freight_value (item-level derived column) | Data Engineer | not started | REQ-008.1 | — | `order_payment_value` removed from fct_sales (double-count risk) |
+| REQ-005.1 | `dim_customers` — PK: `customer_unique_id`; city, state, zip, lat, lng | Data Engineer | in progress | — | — | lat/lng from `stg_geolocation`; nullable where no match. Model created, compiles. |
+| REQ-006.1 | `dim_products` — PK: `product_id`; COALESCE English/Portuguese/uncategorized | Data Engineer | in progress | — | — | Pass-through from `stg_products`. Model created, compiles. |
+| REQ-007.1 | `dim_date` — PK: `date_key DATE`; generated via `dbt_utils.date_spine` | Data Engineer | in progress | — | — | Range: 2016-01-01 to 2018-12-31. Model created, compiles. See ADR-001 |
+| REQ-051.1 | `dim_sellers` — PK: `seller_id`; city, state, zip, lat, lng | Data Engineer | in progress | — | — | lat/lng from `stg_geolocation`; nullable where no match. Model created, compiles. |
+| REQ-008.1 | `fct_sales` — order-item granularity; FKs to all 4 dims | Data Engineer | in progress | — | — | Three-source CTE (order_items → orders → customers). Model created, compiles. |
+| REQ-052.1 | `fct_reviews` — deduplicated on `review_id`; FK: `order_id` → `stg_orders` | Data Engineer | in progress | — | — | Pass-through from `stg_reviews` (already deduped). Model created, compiles. See ADR-003 |
+| REQ-053.1 | `fct_payments` — compound key (`order_id`, `payment_sequential`) | Data Engineer | in progress | — | — | `date_key` from `stg_orders` via explicit CTE. Model created, compiles. |
+| REQ-054.1 | `stg_geolocation` — Brazil bounding-box filter; AVG() lat/lng per zip | Data Engineer | in progress | — | — | Already implemented in staging by Agent 1b. Used by dim_customers and dim_sellers. |
+| REQ-013.1 | `total_sale_amount` = price + freight_value (item-level derived column) | Data Engineer | in progress | — | — | Computed in `fct_sales`. `order_payment_value` excluded. Model created, compiles. |
 
 ---
 
