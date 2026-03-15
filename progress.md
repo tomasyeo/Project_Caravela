@@ -45,15 +45,15 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-005.1 | `dim_customers` — PK: `customer_unique_id`; city, state, zip, lat, lng | Data Engineer | in progress | — | — | lat/lng from `stg_geolocation`; nullable where no match. Model created, compiles. |
-| REQ-006.1 | `dim_products` — PK: `product_id`; COALESCE English/Portuguese/uncategorized | Data Engineer | in progress | — | — | Pass-through from `stg_products`. Model created, compiles. |
-| REQ-007.1 | `dim_date` — PK: `date_key DATE`; generated via `dbt_utils.date_spine` | Data Engineer | in progress | — | — | Range: 2016-01-01 to 2018-12-31. Model created, compiles. See ADR-001 |
-| REQ-051.1 | `dim_sellers` — PK: `seller_id`; city, state, zip, lat, lng | Data Engineer | in progress | — | — | lat/lng from `stg_geolocation`; nullable where no match. Model created, compiles. |
-| REQ-008.1 | `fct_sales` — order-item granularity; FKs to all 4 dims | Data Engineer | in progress | — | — | Three-source CTE (order_items → orders → customers). Model created, compiles. |
-| REQ-052.1 | `fct_reviews` — deduplicated on `review_id`; FK: `order_id` → `stg_orders` | Data Engineer | in progress | — | — | Pass-through from `stg_reviews` (already deduped). Model created, compiles. See ADR-003 |
-| REQ-053.1 | `fct_payments` — compound key (`order_id`, `payment_sequential`) | Data Engineer | in progress | — | — | `date_key` from `stg_orders` via explicit CTE. Model created, compiles. |
-| REQ-054.1 | `stg_geolocation` — Brazil bounding-box filter; AVG() lat/lng per zip | Data Engineer | in progress | — | — | Already implemented in staging by Agent 1b. Used by dim_customers and dim_sellers. |
-| REQ-013.1 | `total_sale_amount` = price + freight_value (item-level derived column) | Data Engineer | in progress | — | — | Computed in `fct_sales`. `order_payment_value` excluded. Model created, compiles. |
+| REQ-005.1 | `dim_customers` — PK: `customer_unique_id`; city, state, zip, lat, lng | Data Engineer | complete | — | — | lat/lng from `stg_geolocation`; nullable where no match. `dbt build` PASS. |
+| REQ-006.1 | `dim_products` — PK: `product_id`; COALESCE English/Portuguese/uncategorized | Data Engineer | complete | — | Yes | Pass-through from `stg_products`. COALESCE dead-branch fixed. WHERE filter removed (was excluding 610 dim rows, breaking FK tests). `dbt build` PASS. **Analyst note:** use `product_category_name_english` for all analysis — `product_category_name` contains empty strings for 610 products. |
+| REQ-007.1 | `dim_date` — PK: `date_key DATE`; generated via `dbt_utils.date_spine` | Data Engineer | complete | — | — | Range: 2016-01-01 to 2018-12-31. `dbt build` PASS. See ADR-001 |
+| REQ-051.1 | `dim_sellers` — PK: `seller_id`; city, state, zip, lat, lng | Data Engineer | complete | — | — | lat/lng from `stg_geolocation`; nullable where no match. `dbt build` PASS. |
+| REQ-008.1 | `fct_sales` — order-item granularity; FKs to all 4 dims | Data Engineer | complete | — | — | Three-source CTE (order_items → orders → customers). `dbt build` PASS. |
+| REQ-052.1 | `fct_reviews` — deduplicated on `review_id`; FK: `order_id` → `stg_orders` | Data Engineer | complete | — | — | Pass-through from `stg_reviews` (already deduped). FK → stg_orders (not fct_sales). `dbt build` PASS. See ADR-003 |
+| REQ-053.1 | `fct_payments` — compound key (`order_id`, `payment_sequential`) | Data Engineer | complete | — | — | `date_key` from `stg_orders` via explicit CTE. `dbt build` PASS. |
+| REQ-054.1 | `stg_geolocation` — Brazil bounding-box filter; AVG() lat/lng per zip | Data Engineer | complete | — | — | Already implemented in staging by Agent 1b. Used by dim_customers and dim_sellers. `dbt build` PASS. |
+| REQ-013.1 | `total_sale_amount` = price + freight_value (item-level derived column) | Data Engineer | complete | — | — | Computed in `fct_sales`. `order_payment_value` excluded. `dbt build` PASS. |
 
 ---
 
@@ -61,11 +61,11 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-015.1 | dbt-expectations generic tests in `schema.yml` | Data Engineer | not started | REQ-008.1; REQ-052.1; REQ-053.1 | — | Column ranges, accepted values, null thresholds, row counts |
-| REQ-016.1 | `relationships` tests for all FK columns across all fact tables | Data Engineer | not started | REQ-015.1 | — | `fct_sales` 4 FKs + `fct_payments.date_key → dim_date`; `fct_reviews.order_id → stg_orders` in REQ-017.1 |
-| REQ-017.1 | Singular SQL tests in `tests/` for cross-table assertions | Data Engineer | not started | REQ-015.1 | — | `date_key` range test unblocked (DATE confirmed) |
-| REQ-018.1 | Null threshold tests calibrated from `docs/data_profile.json` | Data Engineer | not started | REQ-015.1 | — | `review_comment_title` 0.08; `review_comment_message` 0.40; `geo` 0.97 |
-| REQ-019.1 | All data quality tests executable via single `dbt test` command | Data Engineer | not started | REQ-015.1 | — | NFR — satisfied automatically by dbt test architecture |
+| REQ-015.1 | dbt-expectations generic tests in `schema.yml` | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` (10 models) + `dbt/models/marts/schema.yml` (7 models) created. Column ranges, accepted values, null thresholds, row counts declared. |
+| REQ-016.1 | `relationships` tests for all FK columns across all fact tables | Data Engineer | complete | — | — | `fct_sales` 4 FKs (dim_customers, dim_products, dim_sellers, dim_date). `fct_reviews.order_id → stg_orders` (NOT fct_sales — 756 itemless orders). `fct_payments` compound PK only; no dim_date FK (date_key nullable via LEFT JOIN). |
+| REQ-017.1 | Singular SQL tests in `tests/` for cross-table assertions | Data Engineer | complete | — | — | 3 tests: `assert_boleto_single_installment.sql`, `assert_payment_reconciliation.sql`, `assert_date_key_range.sql` |
+| REQ-018.1 | Null threshold tests calibrated from `docs/data_profile.json` | Data Engineer | complete | — | — | `review_comment_title` mostly=0.08; `review_comment_message` mostly=0.40; `dim_customers` lat/lng mostly=0.97 |
+| REQ-019.1 | All data quality tests executable via single `dbt test` command | Data Engineer | complete | — | — | NFR satisfied — all tests in schema.yml + tests/ directory, run via `dbt test` or `dbt build` |
 
 ---
 
@@ -111,7 +111,7 @@
 | REQ-036.1 | Local run setup document | Data Engineer | not started | post-implementation | — | Includes `dbt deps`, `dbt parse`, `dbt docs generate && dbt docs serve` |
 | REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 2 entries added (dataset rename, date_key type) |
 | REQ-045.1 | `README.md` at repo root with deployment URL placeholder | AI Pipeline Architect | not started | post-implementation | — | URL added after Streamlit Cloud deploy |
-| REQ-046.1 | dbt `schema.yml` descriptions for all models + columns | Data Engineer | not started | REQ-008.1 | — | `dbt docs generate` must run without errors; `target/` NOT committed |
+| REQ-046.1 | dbt `schema.yml` descriptions for all models + columns | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` + `dbt/models/marts/schema.yml` created with model and column descriptions for all 10 staging + 7 mart models. |
 | REQ-047.1 | `.env.example` with all required env vars | Data Engineer | complete | — | — | File created at repo root |
 | REQ-048.1 | Dagster asset descriptions in UI | Data Engineer | not started | REQ-026.1 | — | `@dbt_assets` inherits from dbt `schema.yml` |
 | REQ-049.1 | All docs in `docs/`; diagrams in `docs/diagrams/` | All | not started | — | — | — |

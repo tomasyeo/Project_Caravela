@@ -1,0 +1,272 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: >
+      Staged customer records from the Olist raw dataset. Each row represents
+      one customer order-scoped ID. Multiple rows may share the same
+      customer_unique_id (repeat customers). All columns cast from STRING.
+    columns:
+      - name: customer_id
+        description: Order-scoped customer identifier (FK in stg_orders).
+        tests:
+          - not_null
+          - unique
+      - name: customer_unique_id
+        description: True customer PK — consistent across repeat purchases.
+        tests:
+          - not_null
+      - name: customer_zip_code_prefix
+        description: 5-digit zip code prefix used for geolocation join.
+      - name: customer_city
+        description: Customer city name.
+      - name: customer_state
+        description: Brazilian state abbreviation (2 letters).
+        tests:
+          - not_null
+
+  - name: stg_orders
+    description: >
+      Staged order headers. One row per order. Contains order lifecycle
+      timestamps and status. All timestamps cast from STRING; date_key derived
+      as DATE from order_purchase_timestamp for fact table FK joins.
+    tests:
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          column_A: order_approved_at
+          column_B: order_purchase_timestamp
+          or_equal: true
+    columns:
+      - name: order_id
+        description: Primary key for orders.
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: FK to stg_customers.customer_id (order-scoped).
+        tests:
+          - not_null
+      - name: order_status
+        description: Current order lifecycle status.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - delivered
+                - shipped
+                - canceled
+                - unavailable
+                - invoiced
+                - processing
+                - created
+                - approved
+      - name: order_purchase_timestamp
+        description: Timestamp when the order was placed.
+      - name: order_approved_at
+        description: Timestamp when payment was approved (nullable).
+      - name: order_delivered_carrier_date
+        description: Timestamp when order was handed to carrier (nullable).
+      - name: order_delivered_customer_date
+        description: Timestamp when order was delivered to customer (nullable).
+      - name: order_estimated_delivery_date
+        description: Seller-estimated delivery date (nullable).
+      - name: date_key
+        description: DATE derived from order_purchase_timestamp; FK to dim_date.
+
+  - name: stg_order_items
+    description: >
+      Staged order line items. One row per (order_id, order_item_id) pair.
+      Contains price, freight_value, and references to product and seller.
+      total_sale_amount is computed at the mart layer (price + freight_value).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - order_id
+            - order_item_id
+    columns:
+      - name: order_id
+        description: FK to stg_orders.order_id.
+        tests:
+          - not_null
+      - name: order_item_id
+        description: Sequential item number within an order (1-based).
+        tests:
+          - not_null
+      - name: product_id
+        description: FK to stg_products.product_id.
+        tests:
+          - not_null
+      - name: seller_id
+        description: FK to stg_sellers.seller_id.
+        tests:
+          - not_null
+      - name: shipping_limit_date
+        description: Deadline for seller to ship the item.
+      - name: price
+        description: Item price in BRL.
+        tests:
+          - not_null
+      - name: freight_value
+        description: Freight cost for the item in BRL.
+        tests:
+          - not_null
+
+  - name: stg_payments
+    description: >
+      Staged payment records. One row per (order_id, payment_sequential).
+      Rows with payment_type = 'not_defined' filtered out (3 zero-value rows).
+      payment_installments clamped to minimum 1 via GREATEST (2 credit_card
+      rows had 0 installments). All source defects corrected at staging layer.
+    columns:
+      - name: order_id
+        description: FK to stg_orders.order_id.
+        tests:
+          - not_null
+      - name: payment_sequential
+        description: Payment sequence number within the order (1-based).
+        tests:
+          - not_null
+      - name: payment_type
+        description: Payment method used.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - credit_card
+                - boleto
+                - voucher
+                - debit_card
+      - name: payment_installments
+        description: Number of installments (minimum 1 after staging clamp).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+      - name: payment_value
+        description: Payment amount in BRL (zero is valid for vouchers).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+
+  - name: stg_reviews
+    description: >
+      Staged customer reviews deduplicated on review_id. Source had 789
+      duplicate review_id values; kept most recent by review_answer_timestamp.
+      order_id is NOT unique — 547 orders have multiple reviews with distinct
+      review_id values. date_key derived from review_creation_date.
+    columns:
+      - name: review_id
+        description: Primary key for reviews (deduplicated in staging).
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: FK to stg_orders.order_id. NOT unique — multiple reviews per order are valid.
+        tests:
+          - not_null
+      - name: review_score
+        description: Customer review score (1=worst, 5=best).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 5
+      - name: review_comment_title
+        description: >
+          Optional short review title. tap-csv loads empty cells as empty strings
+          not NULLs — ~11.7% of rows have actual content (length > 0).
+          Fill rate confirmed via diagnostic query. Proportion test omitted —
+          dbt-expectations metaplane fork has no mostly support.
+      - name: review_comment_message
+        description: >
+          Optional review body text. tap-csv loads empty cells as empty strings
+          not NULLs — ~41.3% of rows have actual content (length > 0).
+          Fill rate confirmed via diagnostic query. Proportion test omitted —
+          dbt-expectations metaplane fork has no mostly support.
+      - name: review_creation_date
+        description: Timestamp when the review was created.
+      - name: review_answer_timestamp
+        description: Timestamp when the review was answered.
+      - name: date_key
+        description: DATE derived from review_creation_date; FK to dim_date.
+
+  - name: stg_products
+    description: >
+      Staged product catalogue joined to Portuguese-to-English category translations.
+      COALESCE applied for category name: English then Portuguese then 'uncategorized'.
+      Misspelled source columns (product_name_lenght, product_description_lenght)
+      renamed to product_name_length and product_description_length.
+    columns:
+      - name: product_id
+        description: Primary key for products.
+        tests:
+          - not_null
+          - unique
+      - name: product_category_name
+        description: Original Portuguese category name from source.
+      - name: product_category_name_english
+        description: English category name (COALESCE fallback to Portuguese or 'uncategorized').
+      - name: product_name_length
+        description: Character count of the product name (renamed from misspelled product_name_lenght). Nullable where source field is empty string — SAFE_CAST returns NULL.
+      - name: product_description_length
+        description: Character count of the product description (renamed from misspelled product_description_lenght). Nullable where source field is empty string — SAFE_CAST returns NULL.
+      - name: product_photos_qty
+        description: Number of product photos.
+      - name: product_weight_g
+        description: Product weight in grams.
+      - name: product_length_cm
+        description: Product length in centimetres.
+      - name: product_height_cm
+        description: Product height in centimetres.
+      - name: product_width_cm
+        description: Product width in centimetres.
+
+  - name: stg_geolocation
+    description: >
+      Aggregated geolocation by zip code prefix. Source rows filtered to Brazil
+      bounding box (lat BETWEEN -35 AND 5, lng BETWEEN -75 AND -34) before AVG.
+      One row per unique zip_code_prefix after deduplication via GROUP BY.
+    columns:
+      - name: zip_code_prefix
+        description: 5-digit zip code prefix (PK after AVG aggregation).
+        tests:
+          - not_null
+          - unique
+      - name: geolocation_lat
+        description: Average latitude for the zip code prefix (bounded to Brazil).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -35
+              max_value: 5
+      - name: geolocation_lng
+        description: Average longitude for the zip code prefix (bounded to Brazil).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -75
+              max_value: -34
+
+  - name: stg_sellers
+    description: >
+      Staged seller records. One row per seller. Contains seller location
+      (city, state, zip code prefix) for geolocation enrichment in dim_sellers.
+    columns:
+      - name: seller_id
+        description: Primary key for sellers.
+        tests:
+          - not_null
+          - unique
+      - name: seller_zip_code_prefix
+        description: 5-digit zip code prefix for geolocation join.
+      - name: seller_city
+        description: Seller city name.
+      - name: seller_state
+        description: Brazilian state abbreviation (2 letters).
+
+  - name: stg_product_category_name_translation
+    description: >
+      Lookup table mapping Portuguese product category names to English equivalents.
+      Used in stg_products COALESCE logic. Sourced from product_category_name_translation_view.
+    columns:
+      - name: product_category_name
+        description: Portuguese category name (lookup key).
+        tests:
+          - not_null
+      - name: product_category_name_english
+        description: English translation of the category name.

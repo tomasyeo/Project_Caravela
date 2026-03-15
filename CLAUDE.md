@@ -376,6 +376,13 @@ FROM (
 
 ## Analysis Scope (from BRD v2.3)
 
+> **Product category column warning — use `product_category_name_english`, not `product_category_name`.**
+> `dim_products` (and `stg_products`) carries two category columns:
+> - `product_category_name` — raw Portuguese source value; **610 products have an empty string `''`** (not NULL) because the source CSV had a blank category field. Do not group or filter by this column.
+> - `product_category_name_english` — the clean analytical column; COALESCE applies English translation → Portuguese fallback → `'uncategorized'`. All 610 blank-category products are labelled `'uncategorized'` here.
+>
+> Every notebook aggregation, dashboard filter, and Parquet export must reference `product_category_name_english`. Using `product_category_name` will silently produce an empty-string bucket for ~1.9% of the product catalogue.
+
 **Four notebooks — exploratory/analytical fully separated:**
 - `00_eda.ipynb` — exploratory only; Gold layer schema verification + distribution checks; informs analytical choices; no Parquet output required
 - `01_sales_analysis.ipynb` — metrics 1, 2, 6, 7, 8; exports `sales_orders.parquet`

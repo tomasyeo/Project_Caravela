@@ -1,0 +1,273 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: >
+      Customer dimension. PK: customer_unique_id (true customer identifier,
+      consistent across repeat purchases). Enriched with geolocation lat/lng
+      via left join to stg_geolocation on zip_code_prefix. Customers without
+      a matching zip code will have null lat/lng (~3% expected).
+    columns:
+      - name: customer_unique_id
+        description: Primary key — true customer identifier across all orders.
+        tests:
+          - not_null
+          - unique
+      - name: customer_city
+        description: Customer city name.
+      - name: customer_state
+        description: Brazilian state abbreviation (2 letters).
+      - name: customer_zip_code_prefix
+        description: 5-digit zip code prefix.
+      - name: geolocation_lat
+        description: >
+          Customer latitude from geolocation lookup. Nullable where customer zip code
+          has no match in stg_geolocation (LEFT JOIN). ~97% of customers have a match.
+          Proportion test not possible — dbt-expectations metaplane fork has no mostly support.
+      - name: geolocation_lng
+        description: >
+          Customer longitude from geolocation lookup. Nullable where customer zip code
+          has no match in stg_geolocation (LEFT JOIN). ~97% of customers have a match.
+          Proportion test not possible — dbt-expectations metaplane fork has no mostly support.
+
+  - name: dim_products
+    description: >
+      Product dimension. PK: product_id. English category name guaranteed
+      non-null via COALESCE (English → Portuguese → 'uncategorized'). Column
+      renames from staging (product_name_length, product_description_length)
+      are validated by not_null tests here.
+    columns:
+      - name: product_id
+        description: Primary key for products.
+        tests:
+          - not_null
+          - unique
+      - name: product_category_name_english
+        description: >
+          English product category. COALESCE: English → Portuguese (non-blank) →
+          'uncategorized'. The 610 products with empty-string product_category_name
+          are correctly labelled 'uncategorized' via CASE/NULLIF in stg_products.
+          The 13 products with untranslated Portuguese categories retain their
+          Portuguese name (portateis_cozinha_e_preparadores_de_alimentos, pc_gamer).
+          IMPORTANT: always use this column for analysis and filtering — never use
+          product_category_name, which contains empty strings for those 610 products.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              min_value: 1
+      - name: product_name_length
+        description: Character count of product name (confirms DEF-009 rename succeeded). Nullable where source field is empty string.
+      - name: product_description_length
+        description: Character count of product description (confirms DEF-009 rename succeeded). Nullable where source field is empty string.
+      - name: product_photos_qty
+        description: Number of product photos.
+      - name: product_weight_g
+        description: Product weight in grams.
+      - name: product_length_cm
+        description: Product length in centimetres.
+      - name: product_height_cm
+        description: Product height in centimetres.
+      - name: product_width_cm
+        description: Product width in centimetres.
+
+  - name: dim_sellers
+    description: >
+      Seller dimension. PK: seller_id. Enriched with geolocation lat/lng
+      via left join to stg_geolocation on seller_zip_code_prefix. Sellers
+      without a matching zip code will have null lat/lng.
+    columns:
+      - name: seller_id
+        description: Primary key for sellers.
+        tests:
+          - not_null
+          - unique
+      - name: seller_city
+        description: Seller city name.
+      - name: seller_state
+        description: Brazilian state abbreviation (2 letters).
+      - name: seller_zip_code_prefix
+        description: 5-digit zip code prefix.
+      - name: geolocation_lat
+        description: Seller latitude from geolocation lookup (nullable where zip not found).
+      - name: geolocation_lng
+        description: Seller longitude from geolocation lookup (nullable where zip not found).
+
+  - name: dim_date
+    description: >
+      Date dimension generated via dbt_utils.date_spine. One row per calendar
+      day from 2016-01-01 to 2018-12-30. Covers the full Olist data window
+      (first order 2016-09-04, last order 2018-10-17) with buffer. PK: date_key
+      (DATE type — direct output of date_spine, no casting required).
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 1100
+      - dbt_utils.expression_is_true:
+          expression: "date_key >= cast('2016-01-01' as date) and date_key <= cast('2018-12-31' as date)"
+    columns:
+      - name: date_key
+        description: Primary key — calendar date (DATE type).
+        tests:
+          - not_null
+          - unique
+      - name: year
+        description: Calendar year extracted from date_key.
+      - name: month
+        description: Calendar month (1–12) extracted from date_key.
+      - name: day
+        description: Day of month (1–31) extracted from date_key.
+      - name: day_of_week
+        description: Day of week (1=Sunday, 7=Saturday in BigQuery DAYOFWEEK).
+      - name: quarter
+        description: Calendar quarter (1–4) extracted from date_key.
+
+  - name: fct_sales
+    description: >
+      Sales fact table at order-item granularity. Compound PK: (order_id,
+      order_item_id). Three-source model: stg_order_items joined to stg_orders
+      for date_key and customer_id, then to stg_customers for customer_unique_id.
+      total_sale_amount = price + freight_value. Delivery timestamps are
+      order-level attributes repeated across item rows — use COUNT(DISTINCT
+      order_id) for delivery rate calculations.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - order_id
+            - order_item_id
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 110000
+          max_value: 120000
+    columns:
+      - name: order_id
+        description: FK to stg_orders.order_id (part of compound PK).
+        tests:
+          - not_null
+      - name: order_item_id
+        description: Sequential item number within order (part of compound PK).
+        tests:
+          - not_null
+      - name: product_id
+        description: FK to dim_products.product_id.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+      - name: seller_id
+        description: FK to dim_sellers.seller_id.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_sellers')
+              field: seller_id
+      - name: customer_unique_id
+        description: FK to dim_customers.customer_unique_id (resolved via stg_customers).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_unique_id
+      - name: date_key
+        description: FK to dim_date.date_key (DATE from order_purchase_timestamp).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: order_status
+        description: Order lifecycle status at time of snapshot.
+      - name: price
+        description: Item price in BRL.
+      - name: freight_value
+        description: Freight cost in BRL.
+      - name: total_sale_amount
+        description: price + freight_value (item-level revenue metric).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: order_delivered_customer_date
+        description: Actual delivery timestamp (nullable — only set for delivered orders).
+      - name: order_estimated_delivery_date
+        description: Estimated delivery date set by seller (nullable).
+
+  - name: fct_reviews
+    description: >
+      Review fact table at review granularity. PK: review_id (deduplicated in
+      stg_reviews). FK order_id targets stg_orders — NOT fct_sales — because
+      756 itemless orders have reviews but no fct_sales rows. date_key derived
+      from review_creation_date.
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 95000
+          max_value: 100000
+    columns:
+      - name: review_id
+        description: Primary key for reviews.
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: >
+          FK to stg_orders.order_id (NOT fct_sales — 756 itemless orders have
+          reviews but no sales rows).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: review_score
+        description: Customer review score (1=worst, 5=best).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 5
+      - name: review_comment_title
+        description: Optional short review title.
+      - name: review_comment_message
+        description: Optional review body text.
+      - name: date_key
+        description: DATE derived from review_creation_date.
+      - name: review_answer_timestamp
+        description: Timestamp when the review was answered.
+
+  - name: fct_payments
+    description: >
+      Payment fact table at payment-method granularity. Compound PK:
+      (order_id, payment_sequential). date_key sourced from stg_orders
+      via explicit CTE join on order_id. payment_type and payment_installments
+      are clean (staging fixes applied upstream).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - order_id
+            - payment_sequential
+    columns:
+      - name: order_id
+        description: FK to stg_orders.order_id (part of compound PK).
+        tests:
+          - not_null
+      - name: payment_sequential
+        description: Payment sequence number within the order (part of compound PK).
+        tests:
+          - not_null
+      - name: payment_type
+        description: Payment method used.
+        tests:
+          - accepted_values:
+              values:
+                - credit_card
+                - boleto
+                - voucher
+                - debit_card
+      - name: payment_installments
+        description: Number of installments (minimum 1 — clamped in staging).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+      - name: payment_value
+        description: Payment amount in BRL (zero valid for vouchers).
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+      - name: date_key
+        description: DATE from order_purchase_timestamp via stg_orders join.
