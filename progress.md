@@ -73,18 +73,18 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-020.2 | SQLAlchemy + BigQuery connector in notebooks | Data Analyst | not started | REQ-008.1 | — | `GOOGLE_APPLICATION_CREDENTIALS` env var required |
-| REQ-021.1 | `00_eda.ipynb` — exploratory schema verification; no Parquet output | Data Analyst | not started | REQ-008.1 | — | Seaborn/matplotlib permitted here only |
-| REQ-022.1 | 11 confirmed metrics across 3 analytical notebooks | Data Analyst | not started | REQ-021.1 | — | Metric 4 (delivery) in notebook 3 only |
-| REQ-023.1 | 4-notebook structure; exploratory/analytical separation | Data Analyst | not started | — | — | No cross-notebook variable dependencies |
+| REQ-020.2 | SQLAlchemy + BigQuery connector in notebooks | Data Analyst | complete | — | Yes | Used `google-cloud-bigquery` client directly instead of SQLAlchemy. Added `load_dotenv()` — dataset names read from `.env` (`BIGQUERY_ANALYTICS_DATASET`, `BIGQUERY_RAW_DATASET`) with fallback defaults. See changelog 2026-03-16. |
+| REQ-021.1 | `00_eda.ipynb` — exploratory schema verification; no Parquet output | Data Analyst | complete | — | — | 27 cells (15 md + 12 code), 0 errors. Row counts, schemas, null distributions, distribution checks, data cut awareness. Data quality notes expanded to 7 items including `dim_date.date_key` DATETIME quirk. |
+| REQ-022.1 | 11 confirmed metrics across 3 analytical notebooks | Data Analyst | complete | — | — | Metrics 1,2,6,7,8 in nb01; 3,5,9+delay×review in nb02; 4,10,11 in nb03. All charts use plotly.express. Additional deep-dives: freight analysis, Black Friday, cohort retention, delivery promise accuracy, category×region, seller quality tiers, Lorenz/Gini concentration analysis (seller 0.78, customer 0.48, category revenue 0.71), temporal Gini trend, category-level HHI. All insights quality-audited and validated against data. |
+| REQ-023.1 | 4-notebook structure; exploratory/analytical separation | Data Analyst | complete | — | — | 4 notebooks, no cross-notebook variable dependencies. Each opens with markdown referencing EDA findings. |
 | REQ-024.1 | Streamlit dashboard — 4 views; 4 global filters | Data Analyst | not started | REQ-025.1 | — | `featureidkey="properties.sigla"` confirmed |
-| REQ-025.1 | Parquet files in `data/`; committed to repo | Data Analyst | not started | REQ-022.1 | — | 5 files: sales_orders, customer_rfm, satisfaction_summary, geo_delivery, seller_performance |
-| REQ-055.1 | RFM segmentation — hardcoded ref date 2018-08-31; 6 segments | Data Analyst | not started | REQ-022.1 | — | F-tier 3-level; repeat purchase rate standalone metric |
-| REQ-056.1 | Delivery performance — on-time rate + avg delay; notebook 3 | Data Analyst | not started | REQ-022.1 | — | COUNT(DISTINCT order_id); min 30 orders threshold |
-| REQ-057.1 | Review/satisfaction analysis; delay×review correlation | Data Analyst | not started | REQ-022.1 | — | 5 delay bins; NPS proxy scoring |
-| REQ-058.1 | Payment method distribution + installment behaviour | Data Analyst | not started | REQ-022.1 | — | `payment_sequential=1` for primary payment per order |
-| *(no REQ-ID)* | `notebooks/utils.py` — REGION_MAP, SEGMENT_COLOURS, REGION_COLOURS, STATUS_COLOURS, `add_region()` | Data Analyst | not started | — | — | Covered under REQ-022.1/REQ-023.1. Single point of failure — verify imports before running notebooks |
-| *(no REQ-ID)* | `scripts/generate_parquet.py` — optional quick-setup alternative to running all 3 analytical notebooks | Data Analyst | not started | REQ-025.1 | — | Output must match notebooks exactly. Covered under REQ-025.1. If committed, document in REQ-036.1 |
+| REQ-025.1 | Parquet files in `data/`; committed to repo | Data Analyst | complete | — | Yes | 6 files exported: sales_orders (112,279), customer_rfm (95,420), satisfaction_summary (97,379), geo_delivery (533), seller_performance (3,068), concentration_metrics (83). New `concentration_metrics.parquet` added for Lorenz/Gini/HHI dashboard KPIs. See changelog 2026-03-16. |
+| REQ-055.1 | RFM segmentation — hardcoded ref date 2018-08-31; 6 segments | Data Analyst | complete | — | — | Reference date hardcoded. 3-tier F (F1/F2/F3). 6 segments assigned via RF-only. Repeat rate: ~3.1%. |
+| REQ-056.1 | Delivery performance — on-time rate + avg delay; notebook 3 | Data Analyst | complete | — | Yes | COUNT(DISTINCT order_id) used. Min 30 orders threshold. geo_delivery.parquet has year/month cols. Seller cancellation_rate bug fixed (COUNTIF→COUNT DISTINCT CASE). See changelog 2026-03-16. |
+| REQ-057.1 | Review/satisfaction analysis; delay×review correlation | Data Analyst | complete | — | — | 5 delay bins (early/on-time/1-3d/4-7d/7+d). NPS proxy scoring. Box plot + bar chart. |
+| REQ-058.1 | Payment method distribution + installment behaviour | Data Analyst | complete | — | — | payment_sequential=1 for primary payment. Donut + histogram. Credit card ~77% of orders. |
+| *(no REQ-ID)* | `notebooks/utils.py` — REGION_MAP, SEGMENT_COLOURS, REGION_COLOURS, STATUS_COLOURS, `add_region()`, `lorenz_curve()`, `gini_coefficient()`, `hhi()`, `concentration_summary()` | Data Analyst | complete | — | Yes | Updated add_region: added default param + .copy() + dynamic output naming. Colour values kept as-is (Flat UI). Added numpy import + 4 concentration analysis helpers. See changelog 2026-03-16. |
+| *(no REQ-ID)* | `scripts/generate_parquet.py` — optional quick-setup alternative to running all 3 analytical notebooks | Data Analyst | complete | — | Yes | Rewritten to use `google.cloud.bigquery.Client` (matching notebooks). All 6 Parquet schemas aligned exactly with notebook outputs. RFM date upper bound included. See changelog 2026-03-16. |
 
 ---
 
@@ -115,7 +115,7 @@
 | REQ-047.1 | `.env.example` with all required env vars | Data Engineer | complete | — | — | File created at repo root |
 | REQ-048.1 | Dagster asset descriptions in UI | Data Engineer | not started | REQ-026.1 | — | `@dbt_assets` inherits from dbt `schema.yml` |
 | REQ-049.1 | All docs in `docs/`; diagrams in `docs/diagrams/` | All | not started | — | — | — |
-| REQ-050.1 | Dashboard user guide — 4 views, 4 filters documented | Dash Engineer + Data Analyst | not started | REQ-024.1 | — | Dash Engineer: technical operation, filter behaviour, layout. Data Analyst: metric definitions, interpretation, business context |
+| REQ-050.1 | Dashboard user guide — 4 views, 4 filters documented | Dash Engineer + Data Analyst | in progress | REQ-024.1 | — | Data Analyst draft complete (`docs/dashboard_user_guide_analyst_draft.md`): metric definitions, interpretation guidance, segment actions, filter applicability, data quality notes. Dash Engineer to merge with technical operation sections. |
 | REQ-061.1 | ADRs in `docs/decisions/` — minimum 3 pre-populated | Platform Engineer / Data Engineer | in progress | — | — | ADR-001, ADR-002, ADR-003 created |
 | REQ-065.1 | `progress.md` — REQ-level implementation status tracker | Platform Engineer | complete | — | — | This file |
 
@@ -126,7 +126,7 @@
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
 | REQ-062.1 | `docs/troubleshooting.md` | Data Engineer | not started | — | — | Add entries as issues are encountered |
-| REQ-063.1 | `docs/data_dictionary.md` | Data Engineer + Data Analyst | not started | REQ-046.1 | — | Draft from `dbt docs generate` output |
+| REQ-063.1 | `docs/data_dictionary.md` | Data Engineer + Data Analyst | in progress | — | — | Data Analyst draft complete: Parquet schemas, derived columns, metric definitions, business context. Data Engineer to add raw/staging column definitions. |
 | REQ-064.1 | `docs/testing_guide.md` | Data Engineer | not started | REQ-015.1 | — | Evidence base: `docs/data_profile.json` |
 
 ---
