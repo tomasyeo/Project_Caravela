@@ -16,8 +16,8 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-059.1 | Python 3.11, conda env `assignment2`, dependencies installed | Data Engineer | not started | — | — | — |
-| REQ-060.1 | macOS/Linux supported; Windows via WSL2 | Data Engineer | not started | — | — | — |
+| REQ-059.1 | Python 3.11, conda env `assignment2`, dependencies installed | Data Engineer | complete | — | — | Python 3.11.15 confirmed in `assignment2` env. dagster 1.12.18, dagster-dbt 0.28.18, dbt-core 1.11.7, meltano 4.1.2 all installed. |
+| REQ-060.1 | macOS/Linux supported; Windows via WSL2 | Data Engineer | complete | — | — | Developed and validated on macOS Darwin 26.3.1. `launch_dagster.sh` uses `stat -f` (macOS) with `stat -c` Linux fallback. |
 
 ---
 
@@ -27,7 +27,7 @@
 |---|---|---|---|---|---|---|
 | REQ-001.2 | Meltano pipeline configured: `tap-csv` → `target-bigquery` | Data Engineer | complete | — | Yes | Deviated from spec: `tap-csv` instead of `tap-spreadsheets-anywhere`; `batch_job` method; `_view` suffix on BQ table names. See changelog 2026-03-14 entries. |
 | REQ-002.1 | All 9 source CSVs loaded to `olist_raw` | Data Engineer | complete | — | Yes | All 9 tables + 9 flat-column views in `olist_raw`. dbt must query `*_view` tables. See changelog. |
-| REQ-003.1 | BigQuery datasets pre-created; `GOOGLE_APPLICATION_CREDENTIALS` provisioned | Platform Engineer | not started | — | — | **Pre-implementation blocker** — credentials must be provisioned before any pipeline stage runs. Platform Engineer to coordinate with team. |
+| REQ-003.1 | BigQuery datasets pre-created; `GOOGLE_APPLICATION_CREDENTIALS` provisioned | Platform Engineer | in progress | — | — | `GOOGLE_APPLICATION_CREDENTIALS` and `GCP_PROJECT_ID` confirmed set in environment. Datasets (`olist_raw`, `olist_analytics`) must exist before first live run — `launch_dagster.sh` pre-flight check C-03/04 verifies credentials. `.env` auto-loading via `launch_dagster.sh` + `dagster/dagster_home/dagster.yaml` (EnvFileLoader) complete. |
 
 ---
 
@@ -92,10 +92,10 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-026.1 | Dagster project with `dagster-dbt`; Meltano shell asset; `dbt build` | Data Engineer | not started | REQ-004.1 | — | `dbt parse` required before `dagster dev`; AssetKey prefix = `olist_raw` |
-| REQ-027.1 | Manual triggering via Dagster UI + CLI | Data Engineer | not started | REQ-026.1 | — | — |
-| REQ-028.2 | Daily 09:00 SGT schedule; `execution_timezone="Asia/Singapore"` | Data Engineer | not started | REQ-026.1 | — | Requires `dagster-daemon` for schedule execution |
-| REQ-029.1 | Dagster UI accessible; asset materialisation state visible | Data Engineer | not started | REQ-026.1 | — | `dagster dev` starts both webserver and daemon |
+| REQ-026.1 | Dagster project with `dagster-dbt`; Meltano shell asset; `dbt build` | Platform Engineer | complete | — | Yes | 5 files created and validated. 25 assets in correct topological order. `meltano_ingest` uses `@multi_asset(specs=...)` — confirmed PRODUCER of `olist_raw/*` (not consumer). Execution order enforced: meltano_ingest → olist_raw/* → stg_* → dim_*/fct_*. All paths `__file__`-relative. |
+| REQ-027.1 | Manual triggering via Dagster UI + CLI | Platform Engineer | complete | — | — | `full_pipeline_job` defined with `AssetSelection.all()`. Triggerable via UI Materialize button or `dagster job execute -j full_pipeline_job`. |
+| REQ-028.2 | Daily 09:00 SGT schedule; `execution_timezone="Asia/Singapore"` | Platform Engineer | complete | — | Yes | `cron_schedule="0 9 * * *"`, `execution_timezone="Asia/Singapore"` confirmed. `job_name` string used instead of job object reference (avoids circular import). Schedule name: `full_pipeline_job_schedule`. |
+| REQ-029.1 | Dagster UI accessible; asset materialisation state visible | Platform Engineer | complete | — | — | All 25 assets load cleanly. Launch via `./scripts/launch_dagster.sh` (pre-flight checks credentials, manifest.json, dagster binary). |
 
 ---
 
@@ -108,15 +108,15 @@
 | REQ-032.1 | Star schema ERD — must annotate `fct_reviews.order_id → stg_orders` | Data Engineer | not started | REQ-008.1 | — | dbdiagram.io + DBML committed |
 | REQ-033.1 | Technical report — tool selection rationale + schema justification | AI Pipeline Architect | not started | — | — | — |
 | REQ-035.1 | Project implementation document | Data Engineer | not started | post-implementation | — | — |
-| REQ-036.1 | Local run setup document | Data Engineer | not started | post-implementation | — | Includes `dbt deps`, `dbt parse`, `dbt docs generate && dbt docs serve` |
-| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 2 entries added (dataset rename, date_key type) |
+| REQ-036.1 | Local run setup document | Data Engineer | not started | post-implementation | — | Includes `dbt deps`, `dbt parse`, `dbt docs generate && dbt docs serve`. `scripts/launch_dagster.sh` handles `.env` loading and `DAGSTER_HOME` — reference in setup doc. |
+| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 26 entries as of 2026-03-16. Covers all Meltano, dbt, and Dagster deviations. |
 | REQ-045.1 | `README.md` at repo root with deployment URL placeholder | AI Pipeline Architect | not started | post-implementation | — | URL added after Streamlit Cloud deploy |
 | REQ-046.1 | dbt `schema.yml` descriptions for all models + columns | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` + `dbt/models/marts/schema.yml` created with model and column descriptions for all 10 staging + 7 mart models. |
 | REQ-047.1 | `.env.example` with all required env vars | Data Engineer | complete | — | — | File created at repo root |
-| REQ-048.1 | Dagster asset descriptions in UI | Data Engineer | not started | REQ-026.1 | — | `@dbt_assets` inherits from dbt `schema.yml` |
+| REQ-048.1 | Dagster asset descriptions in UI | Platform Engineer | complete | — | — | `@dbt_assets` auto-inherits descriptions from dbt `schema.yml`. `meltano_ingest` description set on `@multi_asset` decorator. |
 | REQ-049.1 | All docs in `docs/`; diagrams in `docs/diagrams/` | All | not started | — | — | — |
 | REQ-050.1 | Dashboard user guide — 4 views, 4 filters documented | Dash Engineer + Data Analyst | not started | REQ-024.1 | — | Dash Engineer: technical operation, filter behaviour, layout. Data Analyst: metric definitions, interpretation, business context |
-| REQ-061.1 | ADRs in `docs/decisions/` — minimum 3 pre-populated | Platform Engineer / Data Engineer | in progress | — | — | ADR-001, ADR-002, ADR-003 created |
+| REQ-061.1 | ADRs in `docs/decisions/` — minimum 3 pre-populated | Platform Engineer / Data Engineer | complete | — | — | 4 ADRs created: ADR-001 (date_key type), ADR-002 (dataset rename), ADR-003 (fct_reviews FK target), ADR-004 (tap selection). Exceeds minimum of 3. |
 | REQ-065.1 | `progress.md` — REQ-level implementation status tracker | Platform Engineer | complete | — | — | This file |
 
 ---

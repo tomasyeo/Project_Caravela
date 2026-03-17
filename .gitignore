@@ -44,6 +44,12 @@ build/
 # Git worktrees (multi-agent isolation)
 worktrees/
 
+# Dagster home — runtime data only; dagster.yaml is tracked
+dagster/dagster_home/storage/
+dagster/dagster_home/logs/
+dagster/dagster_home/history/
+dagster/dagster_home/schedules/
+
 # Orchestrator logs
 logs/
 
