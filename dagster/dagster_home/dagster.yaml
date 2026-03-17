@@ -1,0 +1,16 @@
+# dagster.yaml — Project Caravela Dagster home configuration
+#
+# DAGSTER_HOME must point to this directory before `dagster dev` starts.
+# The launch_dagster.sh script handles this automatically.
+#
+# EnvFileLoader reads ../.env (repo root) relative to the dagster/ working
+# directory and injects all vars into the Dagster process environment.
+# This supplies GOOGLE_APPLICATION_CREDENTIALS and GCP_PROJECT_ID to dbt
+# and BIGQUERY_* vars to meltano (once Agent 1 switches to env var refs).
+
+secrets:
+  custom_secrets_manager:
+    module: dagster._core.secrets.env_file
+    class: EnvFileLoader
+    config:
+      base_dir: ".."
