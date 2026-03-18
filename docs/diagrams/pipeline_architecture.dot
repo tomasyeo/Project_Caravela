@@ -1,0 +1,144 @@
+digraph PipelineArchitecture {
+    rankdir=LR;
+    fontname="Helvetica";
+    node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#f5f5f5", color="#333333"];
+    edge [fontname="Helvetica", fontsize=9, color="#555555"];
+    compound=true;
+
+    /* ── Source Layer ──────────────────────────────────────────── */
+    subgraph cluster_sources {
+        label="Source Layer";
+        labeljust=l;
+        style="rounded,dashed";
+        color="#999999";
+        fontsize=12;
+        fontcolor="#666666";
+
+        csv [label="9 CSV Files\n(raw_data/)", fillcolor="#FFF3E0"];
+    }
+
+    /* ── Ingestion Layer ──────────────────────────────────────── */
+    subgraph cluster_ingestion {
+        label="Ingestion Layer";
+        labeljust=l;
+        style="rounded,dashed";
+        color="#999999";
+        fontsize=12;
+        fontcolor="#666666";
+
+        meltano [label="Meltano\ntap-csv → target-bigquery", fillcolor="#E3F2FD"];
+    }
+
+    /* ── BigQuery ─────────────────────────────────────────────── */
+    subgraph cluster_bigquery {
+        label="BigQuery";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#E8EAF6";
+        color="#7986CB";
+        fontsize=12;
+        fontcolor="#3F51B5";
+
+        raw [label="olist_raw\n(9 tables + 9 _view aliases)", fillcolor="#C5CAE9"];
+        analytics [label="olist_analytics\n(Star Schema)", fillcolor="#C5CAE9"];
+    }
+
+    /* ── Transformation Layer (dbt) ───────────────────────────── */
+    subgraph cluster_transformation {
+        label="Transformation Layer (dbt)";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#E8F5E9";
+        color="#66BB6A";
+        fontsize=12;
+        fontcolor="#2E7D32";
+
+        staging [label="Staging Models\n(9 + 1 models)\nAll STRING → typed casts", fillcolor="#C8E6C9"];
+        marts [label="Mart Models\n(4 dims + 3 facts)", fillcolor="#C8E6C9"];
+
+        /* ── Data Quality ── */
+        subgraph cluster_quality {
+            label="Data Quality (dbt test)";
+            labeljust=l;
+            style="rounded,filled";
+            fillcolor="#F1F8E9";
+            color="#AED581";
+            fontsize=10;
+            fontcolor="#558B2F";
+
+            expectations [label="dbt-expectations\nGeneric tests in schema.yml\n(null thresholds, ranges,\nrow counts, temporal pairs)", fillcolor="#DCEDC8"];
+            singular [label="Singular Tests\n(3 SQL in dbt/tests/)\nboleto installments,\npayment reconciliation,\ndate_key range", fillcolor="#DCEDC8"];
+            dbt_utils [label="dbt_utils\n(date_spine → dim_date,\nunique_combination_of_columns)", fillcolor="#DCEDC8"];
+        }
+    }
+
+    /* ── Orchestration (Dagster) ──────────────────────────────── */
+    subgraph cluster_orchestration {
+        label="Orchestration (Dagster)";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#FFF8E1";
+        color="#FFB300";
+        fontsize=12;
+        fontcolor="#F57F17";
+
+        dagster [label="Asset Graph — 25 assets\nmeltano_ingest → stg_* → dim_*/fct_*\nSchedule: daily 09:00 SGT\nTrigger: UI + CLI", fillcolor="#FFECB3"];
+    }
+
+    /* ── Analysis Layer ───────────────────────────────────────── */
+    subgraph cluster_analysis {
+        label="Analysis Layer";
+        labeljust=l;
+        style="rounded,dashed";
+        color="#999999";
+        fontsize=12;
+        fontcolor="#666666";
+
+        notebooks [label="Jupyter Notebooks\n00_eda · 01_sales\n02_customer · 03_geo_seller\n+ notebooks/utils.py", fillcolor="#F3E5F5"];
+    }
+
+    /* ── Data Export ───────────────────────────────────────────── */
+    subgraph cluster_export {
+        label="Data Export";
+        labeljust=l;
+        style="rounded,dashed";
+        color="#999999";
+        fontsize=12;
+        fontcolor="#666666";
+
+        parquet [label="Parquet Files (6)\nsales_orders · customer_rfm\nsatisfaction_summary · geo_delivery\nseller_performance\nconcentration_metrics", fillcolor="#E0F7FA"];
+    }
+
+    /* ── Presentation Layer ───────────────────────────────────── */
+    subgraph cluster_presentation {
+        label="Presentation Layer";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#FCE4EC";
+        color="#EF9A9A";
+        fontsize=12;
+        fontcolor="#C62828";
+
+        streamlit [label="Streamlit Dashboard\n(5 pages in streamlit/)", fillcolor="#F8BBD0"];
+        brief [label="Executive Brief\n(docs/executive_brief.md)", fillcolor="#F8BBD0"];
+    }
+
+    /* ── Data Flow Edges ──────────────────────────────────────── */
+    csv -> meltano [label="  CSV ingest  ", penwidth=2, color="#E65100"];
+    meltano -> raw [label="  load  ", penwidth=2, color="#1565C0"];
+    raw -> staging [label="  source()  ", penwidth=2, color="#2E7D32"];
+    staging -> marts [label="  ref()  ", penwidth=2, color="#2E7D32"];
+    dbt_utils -> marts [style=dashed, color="#7CB342", label="  macros  "];
+    marts -> expectations [style=dashed, color="#7CB342", label="  validates  "];
+    staging -> expectations [style=dashed, color="#7CB342", label="  validates  "];
+    marts -> singular [style=dashed, color="#7CB342", label="  validates  "];
+    marts -> analytics [label="  materialise  ", penwidth=2, color="#1565C0"];
+    analytics -> notebooks [label="  SQL queries  ", penwidth=2, color="#7B1FA2"];
+    notebooks -> parquet [label="  export  ", penwidth=2, color="#00838F"];
+    parquet -> streamlit [label="  read  ", penwidth=2, color="#C62828"];
+    notebooks -> brief [label="  insights  ", penwidth=1.5, color="#C62828"];
+
+    /* ── Dagster Orchestration Edges ──────────────────────────── */
+    dagster -> meltano [style=dashed, color="#F57F17", label="  orchestrates  "];
+    dagster -> staging [style=dashed, color="#F57F17", label="  dbt build  ", lhead=cluster_transformation];
+}

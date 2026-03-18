@@ -1,0 +1,186 @@
+digraph StarSchema {
+    rankdir=LR;
+    fontname="Helvetica";
+    node [fontname="Helvetica", fontsize=16, shape=plaintext];
+    edge [fontname="Helvetica", fontsize=13];
+    size="25.6,14.4!";
+    ratio=fill;
+    pad=0.3;
+    nodesep=0.6;
+    ranksep=1.2;
+    splines=polyline;
+
+    /* ══════════════════════════════════════════════════════════════
+       RANK CONSTRAINTS — 3 columns: satellite facts | fct_sales | dims
+       ══════════════════════════════════════════════════════════════ */
+
+    { rank=same; fct_reviews; fct_payments; legend; }
+    { rank=same; fct_sales; stg_orders; }
+    { rank=same; dim_customers; dim_products; dim_sellers; dim_date; }
+
+    /* Invisible edges to enforce column ordering */
+    fct_reviews -> fct_sales [style=invis];
+    fct_payments -> stg_orders [style=invis];
+
+    /* ══════════════════════════════════════════════════════════════
+       DIMENSION TABLES (Blue) — Right column
+       ══════════════════════════════════════════════════════════════ */
+
+    dim_customers [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#1565C0"><FONT COLOR="white" POINT-SIZE="18"><B>dim_customers</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD"><B>🔑 customer_unique_id</B></TD><TD BGCOLOR="#E3F2FD">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">customer_city</TD><TD BGCOLOR="#BBDEFB">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">customer_state</TD><TD BGCOLOR="#E3F2FD">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">customer_zip_code_prefix</TD><TD BGCOLOR="#BBDEFB">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">geolocation_lat</TD><TD BGCOLOR="#E3F2FD">FLOAT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">geolocation_lng</TD><TD BGCOLOR="#BBDEFB">FLOAT64 ⓝ</TD></TR>
+        </TABLE>
+    >];
+
+    dim_products [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#1565C0"><FONT COLOR="white" POINT-SIZE="18"><B>dim_products</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD"><B>🔑 product_id</B></TD><TD BGCOLOR="#E3F2FD">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">product_category_name_english</TD><TD BGCOLOR="#BBDEFB">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">product_name_length</TD><TD BGCOLOR="#E3F2FD">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">product_description_length</TD><TD BGCOLOR="#BBDEFB">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">product_photos_qty</TD><TD BGCOLOR="#E3F2FD">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">product_weight_g</TD><TD BGCOLOR="#BBDEFB">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">product_length_cm</TD><TD BGCOLOR="#E3F2FD">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">product_height_cm</TD><TD BGCOLOR="#BBDEFB">INT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">product_width_cm</TD><TD BGCOLOR="#E3F2FD">INT64 ⓝ</TD></TR>
+        </TABLE>
+    >];
+
+    dim_sellers [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#1565C0"><FONT COLOR="white" POINT-SIZE="18"><B>dim_sellers</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD"><B>🔑 seller_id</B></TD><TD BGCOLOR="#E3F2FD">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">seller_city</TD><TD BGCOLOR="#BBDEFB">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">seller_state</TD><TD BGCOLOR="#E3F2FD">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">seller_zip_code_prefix</TD><TD BGCOLOR="#BBDEFB">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">geolocation_lat</TD><TD BGCOLOR="#E3F2FD">FLOAT64 ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">geolocation_lng</TD><TD BGCOLOR="#BBDEFB">FLOAT64 ⓝ</TD></TR>
+        </TABLE>
+    >];
+
+    dim_date [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#1565C0"><FONT COLOR="white" POINT-SIZE="18"><B>dim_date</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD"><B>🔑 date_key</B></TD><TD BGCOLOR="#E3F2FD">DATE</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">year</TD><TD BGCOLOR="#BBDEFB">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">month</TD><TD BGCOLOR="#E3F2FD">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">day</TD><TD BGCOLOR="#BBDEFB">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#E3F2FD">day_of_week</TD><TD BGCOLOR="#E3F2FD">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#BBDEFB">quarter</TD><TD BGCOLOR="#BBDEFB">INT64</TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#90CAF9"><FONT POINT-SIZE="12"><I>Generated: dbt_utils.date_spine<BR/>2016-01-01 → 2018-12-31</I></FONT></TD></TR>
+        </TABLE>
+    >];
+
+    /* ══════════════════════════════════════════════════════════════
+       FACT TABLES (Orange) — fct_sales center, others left
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_sales [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#E65100"><FONT COLOR="white" POINT-SIZE="20"><B>fct_sales</B></FONT></TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFF3E0"><FONT POINT-SIZE="12"><I>Grain: order-item · ~112k rows</I></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2"><B>🔑 order_id</B></TD><TD BGCOLOR="#FFE0B2">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>🔑 order_item_id</B></TD><TD BGCOLOR="#FFF3E0">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2"><B>⤷ product_id</B></TD><TD BGCOLOR="#FFE0B2">STRING FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>⤷ seller_id</B></TD><TD BGCOLOR="#FFF3E0">STRING FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2"><B>⤷ customer_unique_id</B></TD><TD BGCOLOR="#FFE0B2">STRING FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>⤷ date_key</B></TD><TD BGCOLOR="#FFF3E0">DATE FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">order_status</TD><TD BGCOLOR="#FFE0B2">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0">price</TD><TD BGCOLOR="#FFF3E0">FLOAT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">freight_value</TD><TD BGCOLOR="#FFE0B2">FLOAT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0">total_sale_amount</TD><TD BGCOLOR="#FFF3E0">FLOAT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">order_delivered_customer_date</TD><TD BGCOLOR="#FFE0B2">TIMESTAMP ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0">order_estimated_delivery_date</TD><TD BGCOLOR="#FFF3E0">TIMESTAMP ⓝ</TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFCC80"><FONT POINT-SIZE="12"><I>total_sale_amount = price + freight_value<BR/>3-source CTE: items → orders → customers</I></FONT></TD></TR>
+        </TABLE>
+    >];
+
+    fct_reviews [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#E65100"><FONT COLOR="white" POINT-SIZE="18"><B>fct_reviews</B></FONT></TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFF3E0"><FONT POINT-SIZE="12"><I>~97k rows (post-dedup)</I></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2"><B>🔑 review_id</B></TD><TD BGCOLOR="#FFE0B2">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>⤷ order_id</B></TD><TD BGCOLOR="#FFF3E0">STRING FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">review_score</TD><TD BGCOLOR="#FFE0B2">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0">review_comment_title</TD><TD BGCOLOR="#FFF3E0">STRING ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">review_comment_message</TD><TD BGCOLOR="#FFE0B2">STRING ⓝ</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>⤷ date_key</B></TD><TD BGCOLOR="#FFF3E0">DATE FK</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">review_answer_timestamp</TD><TD BGCOLOR="#FFE0B2">TIMESTAMP</TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFAB91"><FONT POINT-SIZE="12"><I>⚠ order_id FK → stg_orders (NOT fct_sales)<BR/>756 itemless orders have reviews but no sales</I></FONT></TD></TR>
+        </TABLE>
+    >];
+
+    fct_payments [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#E65100"><FONT COLOR="white" POINT-SIZE="18"><B>fct_payments</B></FONT></TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFF3E0"><FONT POINT-SIZE="12"><I>Compound PK: order_id + payment_sequential</I></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2"><B>🔑 order_id</B></TD><TD BGCOLOR="#FFE0B2">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>🔑 payment_sequential</B></TD><TD BGCOLOR="#FFF3E0">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">payment_type</TD><TD BGCOLOR="#FFE0B2">STRING</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0">payment_installments</TD><TD BGCOLOR="#FFF3E0">INT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFE0B2">payment_value</TD><TD BGCOLOR="#FFE0B2">FLOAT64</TD></TR>
+            <TR><TD ALIGN="LEFT" BGCOLOR="#FFF3E0"><B>⤷ date_key</B></TD><TD BGCOLOR="#FFF3E0">DATE FK ⓝ</TD></TR>
+            <TR><TD COLSPAN="2" BGCOLOR="#FFCC80"><FONT POINT-SIZE="12"><I>date_key from stg_orders (LEFT JOIN)<BR/>Nullable when order missing</I></FONT></TD></TR>
+        </TABLE>
+    >];
+
+    /* ── Staging reference — middle column with fct_sales ── */
+    stg_orders [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD BGCOLOR="#C8E6C9"><FONT POINT-SIZE="18"><B>stg_orders</B></FONT></TD></TR>
+            <TR><TD BGCOLOR="#E8F5E9"><FONT POINT-SIZE="12"><I>Staging layer — not a mart<BR/>Referenced by fct_reviews FK<BR/>and fct_payments date_key</I></FONT></TD></TR>
+        </TABLE>
+    >];
+
+    /* ══════════════════════════════════════════════════════════════
+       FK EDGES — fct_sales → dims (blue, bold)
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_sales -> dim_customers [label="  customer_unique_id  ", color="#1565C0", penwidth=3, style=bold];
+    fct_sales -> dim_products  [label="  product_id  ", color="#1565C0", penwidth=3, style=bold];
+    fct_sales -> dim_sellers   [label="  seller_id  ", color="#1565C0", penwidth=3, style=bold];
+    fct_sales -> dim_date      [label="  date_key  ", color="#1565C0", penwidth=3, style=bold];
+
+    /* ══════════════════════════════════════════════════════════════
+       FK EDGES — satellite facts → dim_date (blue, thinner)
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_reviews  -> dim_date [label="  date_key  ", color="#1565C0", penwidth=2, style=bold];
+    fct_payments -> dim_date [label="  date_key (nullable)  ", color="#1565C0", penwidth=2, style=dashed];
+
+    /* ══════════════════════════════════════════════════════════════
+       FK EDGES — fct_reviews → stg_orders (cross-boundary, red)
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_reviews -> stg_orders [label="  order_id  ⚠ FK crosses\n  mart/staging boundary\n  (756 itemless orders\n  — see ADR-003)  ", color="#C62828", penwidth=3, style=bold];
+
+    /* ══════════════════════════════════════════════════════════════
+       FK EDGES — fct_payments → stg_orders (date_key source, red dashed)
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_payments -> stg_orders [label="  date_key via\n  order_purchase_timestamp\n  (LEFT JOIN — nullable)  ", color="#C62828", penwidth=2.5, style=dashed];
+
+    /* ══════════════════════════════════════════════════════════════
+       LEGEND — Left column with satellite facts
+       ══════════════════════════════════════════════════════════════ */
+
+    legend [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="10">
+            <TR><TD COLSPAN="2" BGCOLOR="#424242"><FONT COLOR="white" POINT-SIZE="18"><B>Legend</B></FONT></TD></TR>
+            <TR><TD BGCOLOR="#BBDEFB"><FONT POINT-SIZE="16">🔑</FONT></TD><TD BGCOLOR="#E3F2FD" ALIGN="LEFT">Primary Key</TD></TR>
+            <TR><TD BGCOLOR="#FFE0B2"><FONT POINT-SIZE="16">⤷</FONT></TD><TD BGCOLOR="#FFF3E0" ALIGN="LEFT">Foreign Key</TD></TR>
+            <TR><TD BGCOLOR="#F5F5F5"><FONT POINT-SIZE="16">ⓝ</FONT></TD><TD BGCOLOR="#F5F5F5" ALIGN="LEFT">Nullable</TD></TR>
+            <TR><TD BGCOLOR="#BBDEFB">Blue header</TD><TD BGCOLOR="#E3F2FD" ALIGN="LEFT">Dimension table</TD></TR>
+            <TR><TD BGCOLOR="#FFE0B2">Orange header</TD><TD BGCOLOR="#FFF3E0" ALIGN="LEFT">Fact table</TD></TR>
+            <TR><TD BGCOLOR="#C8E6C9">Green</TD><TD BGCOLOR="#E8F5E9" ALIGN="LEFT">Staging (cross-boundary ref)</TD></TR>
+            <TR><TD BGCOLOR="#FFAB91">⚠ Red note</TD><TD BGCOLOR="#FFF3E0" ALIGN="LEFT">Architectural deviation</TD></TR>
+        </TABLE>
+    >];
+}

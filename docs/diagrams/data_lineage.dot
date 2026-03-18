@@ -1,0 +1,174 @@
+digraph DataLineage {
+    rankdir=LR;
+    fontname="Helvetica";
+    node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled"];
+    edge [fontname="Helvetica", fontsize=9];
+    newrank=true;
+    size="25.6,14.4!";
+    ratio=fill;
+    pad=0.4;
+    nodesep=0.5;
+    ranksep=1.8;
+    splines=polyline;
+
+    /* ══════════════════════════════════════════════════════════════
+       RAW LAYER — olist_raw
+       ══════════════════════════════════════════════════════════════ */
+
+    subgraph cluster_raw {
+        label="olist_raw (BigQuery)\n9 source tables · All columns STRING";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#FFF3E0";
+        color="#E65100";
+        fontsize=12;
+        fontcolor="#BF360C";
+        margin=15;
+
+        r_cust      [label="olist_customers\n_dataset_view",      fillcolor="#FFE0B2", color="#E65100"];
+        r_ord       [label="olist_orders\n_dataset_view",         fillcolor="#FFE0B2", color="#E65100"];
+        r_items     [label="olist_order_items\n_dataset_view",    fillcolor="#FFE0B2", color="#E65100"];
+        r_pay       [label="olist_order_payments\n_dataset_view", fillcolor="#FFE0B2", color="#E65100"];
+        r_rev       [label="olist_order_reviews\n_dataset_view",  fillcolor="#FFE0B2", color="#E65100"];
+        r_prod      [label="olist_products\n_dataset_view",       fillcolor="#FFE0B2", color="#E65100"];
+        r_sell      [label="olist_sellers\n_dataset_view",        fillcolor="#FFE0B2", color="#E65100"];
+        r_geo       [label="olist_geolocation\n_dataset_view\n~1M rows",  fillcolor="#FFE0B2", color="#E65100"];
+        r_cat       [label="product_category_name\n_translation_view",    fillcolor="#FFE0B2", color="#E65100"];
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       STAGING LAYER
+       ══════════════════════════════════════════════════════════════ */
+
+    subgraph cluster_staging {
+        label="dbt Staging — dbt/models/staging/\nAll STRING → typed casts · SAFE_CAST for nullable fields";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#E8F5E9";
+        color="#2E7D32";
+        fontsize=12;
+        fontcolor="#1B5E20";
+        margin=15;
+
+        stg_cust    [label="stg_customers",                                         fillcolor="#C8E6C9", color="#43A047"];
+        stg_ord     [label="stg_orders",                                            fillcolor="#C8E6C9", color="#43A047"];
+        stg_items   [label="stg_order_items",                                       fillcolor="#C8E6C9", color="#43A047"];
+        stg_pay     [label="stg_payments\nfilters 3 not_defined\nclamps 0→1 installments",  fillcolor="#C8E6C9", color="#43A047"];
+        stg_rev     [label="stg_reviews\nROW_NUMBER dedup\non review_id\n(789 dupes removed)",  fillcolor="#A5D6A7", color="#2E7D32"];
+        stg_prod    [label="stg_products\nCOALESCE:\nenglish → portuguese\n→ uncategorized",   fillcolor="#C8E6C9", color="#43A047"];
+        stg_sell    [label="stg_sellers",                                           fillcolor="#C8E6C9", color="#43A047"];
+        stg_geo     [label="stg_geolocation\nBrazil bounding-box\nAVG(lat,lng) per zip\n~1M → ~8.5k rows", fillcolor="#A5D6A7", color="#2E7D32"];
+        stg_cat     [label="stg_product_category\n_name_translation",               fillcolor="#C8E6C9", color="#43A047"];
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       MART LAYER — Dimensions (blue)
+       ══════════════════════════════════════════════════════════════ */
+
+    subgraph cluster_marts {
+        label="dbt Marts — olist_analytics (Star Schema)";
+        labeljust=l;
+        style="rounded,filled";
+        fillcolor="#F5F5F5";
+        color="#616161";
+        fontsize=12;
+        fontcolor="#212121";
+        margin=15;
+
+        subgraph cluster_dims {
+            label="Dimensions";
+            labeljust=l;
+            style="rounded,filled";
+            fillcolor="#E3F2FD";
+            color="#1E88E5";
+            fontsize=11;
+            fontcolor="#0D47A1";
+            margin=12;
+
+            dim_cust [label="dim_customers\nPK: customer_unique_id\ncity · state · zip\nlat · lng (nullable)", fillcolor="#BBDEFB", color="#1565C0"];
+            dim_prod [label="dim_products\nPK: product_id\nproduct_category\n_name_english",                   fillcolor="#BBDEFB", color="#1565C0"];
+            dim_sell [label="dim_sellers\nPK: seller_id\ncity · state · zip\nlat · lng (nullable)",            fillcolor="#BBDEFB", color="#1565C0"];
+            dim_date [label="dim_date\nPK: date_key (DATE)\n2016-01-01 → 2018-12-31\nGenerated:\ndbt_utils.date_spine", fillcolor="#90CAF9", color="#0D47A1"];
+        }
+
+        subgraph cluster_facts {
+            label="Facts";
+            labeljust=l;
+            style="rounded,filled";
+            fillcolor="#FFF3E0";
+            color="#EF6C00";
+            fontsize=11;
+            fontcolor="#BF360C";
+            margin=12;
+
+            fct_sales [label="fct_sales\nGrain: order-item · ~112k rows\ntotal_sale_amount =\nprice + freight_value\n3-source CTE:\nitems → orders → customers",  fillcolor="#FFE0B2", color="#E65100"];
+            fct_rev   [label="fct_reviews\nPK: review_id\n~97k rows (post-dedup)\nFK: order_id → stg_orders\n(NOT fct_sales)",  fillcolor="#FFE0B2", color="#E65100"];
+            fct_pay   [label="fct_payments\nPK: order_id +\npayment_sequential\ndate_key from stg_orders",  fillcolor="#FFE0B2", color="#E65100"];
+        }
+    }
+
+    /* ── Generator node ── */
+    generator [label="dbt_utils.date_spine\n(generated — no raw source)", fillcolor="#E8EAF6", color="#5C6BC0", shape=hexagon, fontsize=10];
+
+    /* ══════════════════════════════════════════════════════════════
+       EDGES — Raw → Staging (green)
+       ══════════════════════════════════════════════════════════════ */
+
+    r_cust  -> stg_cust  [color="#43A047", penwidth=2];
+    r_ord   -> stg_ord   [color="#43A047", penwidth=2];
+    r_items -> stg_items [color="#43A047", penwidth=2];
+    r_pay   -> stg_pay   [color="#43A047", penwidth=2];
+    r_rev   -> stg_rev   [color="#43A047", penwidth=2];
+    r_prod  -> stg_prod  [color="#43A047", penwidth=2];
+    r_sell  -> stg_sell  [color="#43A047", penwidth=2];
+    r_geo   -> stg_geo   [color="#43A047", penwidth=2];
+    r_cat   -> stg_cat   [color="#43A047", penwidth=2];
+
+    /* ── stg_products dual-source: joins TWO raw tables via source() ── */
+    r_cat -> stg_prod [color="#43A047", penwidth=2, label="JOIN on\nproduct_category_name\n(dual raw source)", fontsize=8];
+
+    /* ── stg_product_category_name_translation is a standalone staging model.
+       It is NOT consumed by stg_products (which uses source() directly).
+       Retained for independent querying / lineage completeness. ── */
+
+    /* ══════════════════════════════════════════════════════════════
+       EDGES — Staging → Dims (blue)
+       ══════════════════════════════════════════════════════════════ */
+
+    stg_cust -> dim_cust [color="#1565C0", penwidth=2];
+    stg_geo  -> dim_cust [color="#1565C0", penwidth=1.5, label="lat/lng\nby zip", fontsize=8];
+    stg_prod -> dim_prod [color="#1565C0", penwidth=2];
+    stg_sell -> dim_sell [color="#1565C0", penwidth=2];
+    stg_geo  -> dim_sell [color="#1565C0", penwidth=1.5, label="lat/lng\nby zip", fontsize=8];
+
+    /* ── dim_date generated ── */
+    generator -> dim_date [color="#5C6BC0", penwidth=2, style=dashed];
+
+    /* ══════════════════════════════════════════════════════════════
+       EDGES — Staging → Facts (orange/red for critical paths)
+       ══════════════════════════════════════════════════════════════ */
+
+    /* fct_sales: 3-source CTE — the most complex join */
+    stg_items -> fct_sales [color="#E65100", penwidth=2.5, label="order_id", fontsize=8];
+    stg_ord   -> fct_sales [color="#E65100", penwidth=2.5, label="order_id →\ncustomer_id", fontsize=8];
+    stg_cust  -> fct_sales [color="#C62828", penwidth=2.5, label="customer_id →\ncustomer_unique_id\n(3-source resolution)", fontsize=8];
+
+    /* fct_reviews: FK to stg_orders (NOT fct_sales) */
+    stg_rev -> fct_rev [color="#E65100", penwidth=2];
+    stg_ord -> fct_rev [style=dashed, color="#C62828", penwidth=2, label="FK: order_id\n→ stg_orders\n(NOT fct_sales)\n756 itemless orders", fontsize=8];
+
+    /* fct_payments: date_key from stg_orders */
+    stg_pay -> fct_pay [color="#E65100", penwidth=2];
+    stg_ord -> fct_pay [style=dashed, color="#C62828", penwidth=2, label="date_key via\norder_purchase\n_timestamp", fontsize=8];
+
+    /* ══════════════════════════════════════════════════════════════
+       EDGES — Fact → Dim FKs (blue, dashed)
+       ══════════════════════════════════════════════════════════════ */
+
+    fct_sales -> dim_cust [style=dashed, color="#1565C0", label="FK:\ncustomer_unique_id", fontsize=8];
+    fct_sales -> dim_prod [style=dashed, color="#1565C0", label="FK:\nproduct_id", fontsize=8];
+    fct_sales -> dim_sell [style=dashed, color="#1565C0", label="FK:\nseller_id", fontsize=8];
+    fct_sales -> dim_date [style=dashed, color="#1565C0", label="FK:\ndate_key", fontsize=8];
+    fct_rev   -> dim_date [style=dashed, color="#1565C0", label="FK:\ndate_key", fontsize=8];
+    fct_pay   -> dim_date [style=dashed, color="#1565C0", label="FK:\ndate_key\n(nullable)", fontsize=8];
+}
