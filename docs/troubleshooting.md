@@ -684,3 +684,203 @@ FROM fct_sales;
 -- WRONG — counts items, not orders
 SELECT COUNT(CASE WHEN ... END) * 1.0 / COUNT(*) ...
 ```
+
+---
+
+## Dagster (Orchestration Layer)
+
+### 36. `dagster dev` fails at startup — `manifest.json` not found
+
+**Symptoms:**
+```
+FileNotFoundError: [Errno 2] No such file or directory: '.../dbt/target/manifest.json'
+```
+Or a Python `Exception` during module import before the UI loads.
+
+**Cause:** `dagster-dbt` reads `manifest.json` at **Python import time** (not at execution time). If `manifest.json` does not exist when `dagster dev` loads `dagster_project`, the import fails immediately.
+
+**Fix:** Generate `manifest.json` before starting Dagster:
+```bash
+cd dbt
+dbt parse        # generates target/manifest.json
+ls -la target/manifest.json   # confirm it exists
+cd ..
+./scripts/launch_dagster.sh
+```
+`dbt parse` exits with code 1 due to a known protobuf bug (see entry #9) — check file existence, not exit code.
+
+**Note:** `manifest.json` must be regenerated after any changes to dbt models, sources, or `schema.yml`.
+
+---
+
+### 37. `dagster dev` — module not found
+
+**Symptoms:**
+```
+ModuleNotFoundError: No module named 'dagster_project'
+```
+
+**Cause:** `dagster dev` was run from the wrong directory. The `pyproject.toml` with `[tool.dagster] module_name = "dagster_project"` must be in the current working directory.
+
+**Fix:** Run from the `dagster/` directory:
+```bash
+cd dagster && dagster dev
+```
+Or use `./scripts/launch_dagster.sh` from the repo root — it `cd`s to `dagster/` automatically.
+
+---
+
+### 38. Schedule visible in UI but never fires
+
+**Symptoms:** `full_pipeline_job_schedule` appears under Automation in the UI and shows "Running" status, but no runs are ever triggered at 09:00 SGT.
+
+**Cause:** `dagster-webserver` is running but `dagster-daemon` is not. The webserver renders the UI; the daemon evaluates and launches scheduled runs. Running only the webserver means schedules are displayed but never executed.
+
+**Fix:** Use `dagster dev` (starts both processes):
+```bash
+./scripts/launch_dagster.sh   # launches dagster dev = webserver + daemon
+```
+For production deployments, both must run explicitly:
+```bash
+dagster-webserver -h 0.0.0.0 -p 3000 &
+dagster-daemon run &
+```
+
+---
+
+### 39. Asset graph shows `olist_raw/*` as grey external assets — Meltano→dbt edge missing
+
+**Symptoms:** In the Dagster asset graph, all 9 `olist_raw/*` assets are grey (external/unexecutable). `meltano_ingest` appears disconnected from or below the `olist_raw/*` assets. Running `full_pipeline_job` skips `meltano_ingest` or runs dbt assets before Meltano.
+
+**Cause:** The `@asset(deps=RAW_TABLES)` pattern was used instead of `@multi_asset(specs=RAW_TABLE_SPECS)`. `deps=` declares `meltano_ingest` as a **consumer** of `olist_raw/*` (downstream), not the producer. Raw tables become external assets — Dagster cannot materialise them and treats them as always available.
+
+**Fix:** Use `@multi_asset(specs=...)` which declares `meltano_ingest` as the **producer** of all 9 assets:
+```python
+# WRONG — makes meltano_ingest downstream
+@asset(deps=RAW_TABLES)
+def meltano_ingest(...): ...
+
+# CORRECT — makes meltano_ingest the producer (upstream)
+@multi_asset(specs=RAW_TABLE_SPECS, name="meltano_ingest")
+def meltano_ingest(...): ...
+```
+After the fix, `olist_raw/*` assets become executable (blue) and topological order enforces: `meltano_ingest` → `olist_raw/*` → `stg_*` → marts.
+
+---
+
+### 40. `dbt build` fails in Dagster — `env_var()` compilation error
+
+**Symptoms:**
+```
+Compilation Error in model ...:
+  env_var('GCP_PROJECT_ID') is not set
+```
+Or:
+```
+google.auth.exceptions.DefaultCredentialsError
+```
+
+**Cause:** `DAGSTER_HOME` is not set, so Dagster did not find `dagster/dagster_home/dagster.yaml`, so the `EnvFileLoader` was never activated. `GCP_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, and `BIGQUERY_ANALYTICS_DATASET` are not in the process environment.
+
+**Fix:** Use `./scripts/launch_dagster.sh` — it sets `DAGSTER_HOME` and sources `.env` before Dagster starts. Alternatively:
+```bash
+export DAGSTER_HOME="$(pwd)/dagster/dagster_home"
+source .env
+cd dagster && dagster dev
+```
+
+**Verify credentials are set before launch:**
+```bash
+echo $GOOGLE_APPLICATION_CREDENTIALS   # must return a file path
+echo $GCP_PROJECT_ID                   # must return a project ID
+```
+
+---
+
+### 41. `meltano_ingest` asset fails — `BIGQUERY_RAW_DATASET` empty or unset
+
+**Symptoms:** `meltano_ingest` run fails with a BigQuery error referencing an empty or invalid dataset name. Meltano logs show `dataset: ` (empty value) or `Table project::table not found`.
+
+**Cause:** `meltano.yml` uses `dataset: $BIGQUERY_RAW_DATASET`. If this env var is not set in the process environment when the Dagster subprocess runs Meltano, it expands to an empty string — producing an invalid BigQuery dataset reference.
+
+**The subprocess command in `assets.py` passes `--env-file ../.env`**, so this should only occur if `.env` does not exist or does not define `BIGQUERY_RAW_DATASET`.
+
+**Diagnostic:**
+```bash
+# Check .env exists and has the var
+grep BIGQUERY_RAW_DATASET "$(pwd)/.env"
+
+# Check Meltano resolves it correctly (run from meltano/)
+cd meltano
+meltano --env-file ../.env config print target-bigquery | grep dataset
+```
+
+**Fix:**
+```bash
+# Ensure .env exists at repo root
+cp .env.example .env
+# Set BIGQUERY_RAW_DATASET=olist_raw (or your test dataset name)
+```
+
+---
+
+### 42. `ScheduleDefinition` raises validation error — job not found
+
+**Symptoms:**
+```
+dagster._core.errors.DagsterInvalidDefinitionError:
+  JobDefinition 'full_pipeline_job' not found in Definitions
+```
+
+**Cause:** `full_pipeline_job` is defined in `__init__.py` but was not added to the `jobs=` list in the `Definitions` object. `ScheduleDefinition(job_name="full_pipeline_job")` resolves the job by name from `Definitions` at load time — if the job is absent, Dagster raises this error.
+
+**Fix:** Confirm `__init__.py` includes:
+```python
+full_pipeline_job = define_asset_job(name="full_pipeline_job", selection=AssetSelection.all())
+
+defs = Definitions(
+    assets=[meltano_ingest, caravela_dbt_assets],
+    jobs=[full_pipeline_job],          # ← must be present
+    schedules=[full_pipeline_schedule],
+    resources={"dbt": dbt_resource},
+)
+```
+
+---
+
+### 43. Circular import error — `schedules.py` imports from `__init__.py`
+
+**Symptoms:**
+```
+ImportError: cannot import name 'full_pipeline_job' from partially initialized module
+'dagster_project' (most likely due to a circular import)
+```
+
+**Cause:** `__init__.py` imports `full_pipeline_schedule` from `schedules.py`, while `schedules.py` imports `full_pipeline_job` from `__init__.py`. This creates a circular dependency that Python cannot resolve.
+
+**Fix:** Reference the job by name string instead of importing the object:
+```python
+# schedules.py — CORRECT (no import from __init__)
+from dagster import ScheduleDefinition
+
+full_pipeline_schedule = ScheduleDefinition(
+    job_name="full_pipeline_job",   # string reference, resolved at load time
+    cron_schedule="0 9 * * *",
+    execution_timezone="Asia/Singapore",
+)
+```
+
+---
+
+### 44. `meltano_ingest` asset key mismatch — Meltano→dbt edge missing at runtime
+
+**Symptoms:** Asset graph renders correctly but after a `meltano_ingest` materialisation, dbt assets still show as "Never materialised" or do not recognise upstream data as fresh. The logical lineage appears broken.
+
+**Cause:** The `AssetKey` values in `RAW_TABLE_SPECS` do not exactly match the source names declared in `sources.yml` and compiled into `manifest.json`. The first element of each key must match the source `name:` in `sources.yml`; the second must match the `table name:` (including any `_view` suffix).
+
+**Fix:** Confirm all 9 `AssetKey` values use `["olist_raw", "<table>_view"]` — the `_view` suffix is required because `target-bigquery` with `denormalized: false` creates flat-column views:
+```python
+AssetSpec(AssetKey(["olist_raw", "olist_customers_dataset_view"])),
+# NOT AssetKey(["olist_raw", "olist_customers_dataset"])
+```
+Check `dbt/models/sources.yml` table names — all 9 must have `_view` suffix.

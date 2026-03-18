@@ -5,7 +5,7 @@ caravela:
       type: bigquery
       method: service-account
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: olist_analytics
+      dataset: "{{ env_var('BIGQUERY_ANALYTICS_DATASET') }}"
       keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
       threads: 4
       timeout_seconds: 300
