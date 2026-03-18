@@ -84,10 +84,12 @@ This report documents the rationale behind each tool selection and the schema de
 
 **Rationale:**
 - **Asset-centric model**: Dagster models the pipeline as a graph of data assets, not a graph of tasks. Each dbt model becomes a Dagster asset automatically via `@dbt_assets`. The Meltano ingestion step is wired as an upstream `@multi_asset` producing 9 `olist_raw` table assets. This creates a single, unified lineage graph: `meltano_ingest → olist_raw/* → stg_* → dim_*/fct_*`.
-- **`dagster-dbt` integration**: The `@dbt_assets` decorator reads `manifest.json` at import time and generates one asset per dbt model. `dbt.cli(["build"])` runs models and tests interleaved — a failing staging test halts the build before dependent marts materialise.
-- **Schedule**: `ScheduleDefinition` with `cron_schedule="0 9 * * *"` and `execution_timezone="Asia/Singapore"` — no manual UTC conversion required.
+- **`@multi_asset(specs=...)` producer pattern**: The Meltano asset uses `@multi_asset(specs=RAW_TABLE_SPECS)` rather than `@asset(deps=RAW_TABLES)`. The `deps=` pattern would declare `meltano_ingest` as a *consumer* of `olist_raw/*` (i.e. downstream), making the raw tables external assets that Dagster treats as always-available. The `specs=` pattern correctly declares `meltano_ingest` as the *producer* of all 9 `olist_raw/*` assets — the topological order then enforces `meltano_ingest` first, with all dbt assets blocked until ingestion completes.
+- **`dagster-dbt` integration**: The `@dbt_assets` decorator reads `manifest.json` at import time and generates one asset per dbt model. `dbt.cli(["build"])` runs models and tests interleaved — a failing staging test halts the build before dependent marts materialise. The `manifest.json` path uses `Path(__file__)`-relative resolution so `dagster dev` works correctly regardless of the launch working directory.
+- **Credential injection chain**: All credentials flow from a single `.env` at repo root into the Dagster process via a three-stage chain: (1) `scripts/launch_dagster.sh` sources `.env` and exports `DAGSTER_HOME=<repo>/dagster/dagster_home` before Dagster starts; (2) Dagster finds `dagster/dagster_home/dagster.yaml` and activates the `EnvFileLoader`, which injects all `.env` vars into the process environment; (3) `dbt.cli(["build"])` inherits those vars — `profiles.yml` reads `GCP_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, and `BIGQUERY_ANALYTICS_DATASET` via `env_var()`. The Meltano subprocess receives `--env-file ../.env` directly so it is self-sufficient regardless of how Dagster was launched.
+- **Schedule**: `ScheduleDefinition` with `cron_schedule="0 9 * * *"` and `execution_timezone="Asia/Singapore"` — no manual UTC conversion required. `job_name="full_pipeline_job"` (string reference) is used instead of importing the job object into `schedules.py`, which would create a circular import with `__init__.py`.
 - **UI observability**: The Dagster web UI shows asset materialisation status, run history, logs (Meltano stdout/stderr forwarded via `context.log`), and schedule status. `dagster dev` starts both webserver and daemon for development.
-- **Manifest pre-generation**: `dbt parse` must run before `dagster dev` on fresh clones — `dagster-dbt` reads `manifest.json` at Python import time, not at execution time.
+- **Manifest pre-generation**: `dbt parse` must run before `dagster dev` on fresh clones — `dagster-dbt` reads `manifest.json` at Python import time, not at execution time. The `scripts/launch_dagster.sh` script supports a `--parse` flag to regenerate the manifest automatically.
 
 ### 2.5 Analysis — Jupyter Notebooks + google-cloud-bigquery
 
@@ -232,11 +234,23 @@ The mart layer has deliberate test coverage decisions that reflect data realitie
 | pandas | 2.3.3 | Data manipulation |
 | google-cloud-bigquery | 3.40.1 | BigQuery Python client (used by all notebooks + `generate_parquet.py`) |
 
-**Credentials and configuration**: All tools read from the repo root `.env` file:
+**Credentials and configuration**: All tools read from the repo root `.env` file, but via different mechanisms — each tool has its own loading path:
+
+| Tool | Loading mechanism |
+|---|---|
+| Meltano | `meltano --env-file ../.env` flag (passed by `launch_meltano.sh` and the Dagster `meltano_ingest` subprocess) |
+| dbt | `env_var()` in `profiles.yml` — reads from process environment at compile time |
+| Dagster | `DAGSTER_HOME` → `dagster/dagster_home/dagster.yaml` → `EnvFileLoader` — injects `.env` into the Dagster process at startup |
+| Jupyter notebooks | `load_dotenv()` via `python-dotenv` at the top of each notebook |
+| Streamlit dashboard | No credentials needed — reads committed Parquet files only |
+
+The four `.env` variables:
 - `GOOGLE_APPLICATION_CREDENTIALS` — path to GCP service account key file
 - `GCP_PROJECT_ID` — BigQuery project identifier
 - `BIGQUERY_ANALYTICS_DATASET` — dbt target dataset (default: `olist_analytics`)
 - `BIGQUERY_RAW_DATASET` — Meltano target dataset / dbt source schema (default: `olist_raw`)
+
+**`DAGSTER_HOME` bootstrap constraint**: Dagster requires `DAGSTER_HOME` to be set in the process environment *before* it starts — it uses this to locate `dagster.yaml` which activates the `EnvFileLoader`. This creates a circular dependency: Dagster cannot load `.env` to discover its home directory. `scripts/launch_dagster.sh` resolves this by sourcing `.env` and exporting `DAGSTER_HOME` as an absolute path before calling `dagster dev`.
 
 ---
 
@@ -247,4 +261,6 @@ The mart layer has deliberate test coverage decisions that reflect data realitie
 - Star schema ERD: `docs/diagrams/star_schema.png` (Graphviz) + `docs/star_schema.dbml` (dbdiagram.io) + `docs/star_schema.dot` (Graphviz source)
 - Data lineage: `docs/diagrams/data_lineage.png` (Graphviz) + `docs/data_lineage.dot` (Graphviz source)
 - Pipeline architecture: `docs/diagrams/pipeline_architecture_detailed_2.png` (Graphviz)
+- Local run setup guide: `docs/local_run_setup.md`
+- Troubleshooting guide: `docs/troubleshooting.md`
 - BRD: `docs/requirements/BRD_Olist_Assignment_v5.0.md`

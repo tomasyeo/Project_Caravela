@@ -92,10 +92,10 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-026.1 | Dagster project with `dagster-dbt`; Meltano shell asset; `dbt build` | Platform Engineer | complete | — | Yes | 5 files created and validated. 25 assets in correct topological order. `meltano_ingest` uses `@multi_asset(specs=...)` — confirmed PRODUCER of `olist_raw/*` (not consumer). Execution order enforced: meltano_ingest → olist_raw/* → stg_* → dim_*/fct_*. All paths `__file__`-relative. |
-| REQ-027.1 | Manual triggering via Dagster UI + CLI | Platform Engineer | complete | — | — | `full_pipeline_job` defined with `AssetSelection.all()`. Triggerable via UI Materialize button or `dagster job execute -j full_pipeline_job`. |
-| REQ-028.2 | Daily 09:00 SGT schedule; `execution_timezone="Asia/Singapore"` | Platform Engineer | complete | — | Yes | `cron_schedule="0 9 * * *"`, `execution_timezone="Asia/Singapore"` confirmed. `job_name` string used instead of job object reference (avoids circular import). Schedule name: `full_pipeline_job_schedule`. |
-| REQ-029.1 | Dagster UI accessible; asset materialisation state visible | Platform Engineer | complete | — | — | All 25 assets load cleanly. Launch via `./scripts/launch_dagster.sh` (pre-flight checks credentials, manifest.json, dagster binary). |
+| REQ-026.1 | Dagster project with `dagster-dbt`; Meltano shell asset; `dbt build` | Platform Engineer | complete | — | Yes | 5 files created and validated. 25 assets in correct topological order. `meltano_ingest` uses `@multi_asset(specs=...)` — confirmed PRODUCER of `olist_raw/*` (not consumer). Execution order enforced: meltano_ingest → olist_raw/* → stg_* → dim_*/fct_*. All paths `__file__`-relative. Live `dagster dev` validated 2026-03-18. |
+| REQ-027.1 | Manual triggering via Dagster UI + CLI | Platform Engineer | complete | — | — | `full_pipeline_job` defined with `AssetSelection.all()`. Triggerable via UI Materialize button or `dagster job execute -j full_pipeline_job`. Confirmed visible in UI 2026-03-18. |
+| REQ-028.2 | Daily 09:00 SGT schedule; `execution_timezone="Asia/Singapore"` | Platform Engineer | complete | — | Yes | `cron_schedule="0 9 * * *"`, `execution_timezone="Asia/Singapore"` confirmed. `job_name` string used instead of job object reference (avoids circular import). Schedule name: `full_pipeline_job_schedule`. Confirmed visible under Automation in UI 2026-03-18. |
+| REQ-029.1 | Dagster UI accessible; asset materialisation state visible | Platform Engineer | complete | — | — | All 25 assets load cleanly. 4-layer topology confirmed in asset graph: meltano_ingest → olist_raw/* → stg_* → dim_*/fct_*. `full_pipeline_job_schedule` visible under Automation. Live validated 2026-03-18 via `./scripts/launch_dagster.sh`. |
 
 ---
 
@@ -104,12 +104,12 @@
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
 | REQ-030.1 | Pipeline architecture diagram + architecture document | AI Pipeline Architect | not started | — | — | draw.io → SVG to `docs/diagrams/` |
-| REQ-031.1 | Data lineage diagram — must show cross-layer dependencies | AI Pipeline Architect | not started | REQ-012.1 | — | Mermaid in `docs/data_lineage.md`; `stg_customers→fct_sales`, `stg_orders→fct_payments` |
+| REQ-031.1 | Data lineage diagram — must show cross-layer dependencies | AI Pipeline Architect | complete | — | — | Completed by Agent 1d. |
 | REQ-032.1 | Star schema ERD — must annotate `fct_reviews.order_id → stg_orders` | Data Engineer | complete | — | — | DBML source and ERD diagram produced by Agent 1c. `fct_reviews.order_id → stg_orders` annotated. |
-| REQ-033.1 | Technical report — tool selection rationale + schema justification | AI Pipeline Architect | not started | — | — | — |
+| REQ-033.1 | Technical report — tool selection rationale + schema justification | AI Pipeline Architect | complete | — | — | `docs/technical_report.md` — all 6 tool sections + schema justification. 266 lines. Dagster section expanded by Agent 2 (2026-03-18): `@multi_asset` producer pattern rationale, credential injection chain, `DAGSTER_HOME` bootstrap constraint; per-tool `.env` loading table added to Section 4. |
 | REQ-035.1 | Project implementation document | Data Engineer | not started | post-implementation | — | — |
-| REQ-036.1 | Local run setup document | Data Engineer | not started | post-implementation | — | Includes `dbt deps`, `dbt parse`, `dbt docs generate && dbt docs serve`. `scripts/launch_dagster.sh` handles `.env` loading and `DAGSTER_HOME` — reference in setup doc. |
-| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 28 entries as of 2026-03-18. Covers all Meltano, dbt, Dagster, notebook, and dashboard deviations. Latest entries: metaplane/dbt-expectations `mostly` constraint (2026-03-18). |
+| REQ-036.1 | Local run setup document | Platform Engineer | complete | — | — | Created `docs/local_run_setup.md` — 10-step guide from fresh clone to running dashboard. Covers one-time setup, manifest generation, Dagster launch, pipeline execution, notebooks, dashboard. References `scripts/launch_dagster.sh` and `docs/troubleshooting.md`. |
+| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 42 entries as of 2026-03-18. Covers all Meltano, dbt, Dagster, notebook, and dashboard deviations. |
 | REQ-045.1 | `README.md` at repo root with deployment URL placeholder | AI Pipeline Architect | not started | post-implementation | — | URL added after Streamlit Cloud deploy |
 | REQ-046.1 | dbt `schema.yml` descriptions for all models + columns | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` + `dbt/models/marts/schema.yml` created with model and column descriptions for all 10 staging + 7 mart models. |
 | REQ-047.1 | `.env.example` with all required env vars | Data Engineer | complete | — | — | File created at repo root |
@@ -125,7 +125,7 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-062.1 | `docs/troubleshooting.md` | Data Engineer | not started | — | — | Add entries as issues are encountered |
+| REQ-062.1 | `docs/troubleshooting.md` | Data Engineer + Platform Engineer | complete | — | — | 44 entries across Meltano (8), dbt staging (9), dbt marts (18), Dagster (9). Dagster section (entries #36–44) added by Agent 2 covering: manifest.json missing, module not found, schedule not firing, wrong dependency direction, env var errors, meltano subprocess failure, job validation error, circular import, AssetKey mismatch. |
 | REQ-063.1 | `docs/data_dictionary.md` | Data Engineer + Data Analyst | complete | — | — | Data Analyst draft (Parquet schemas, metrics, utils API) + Data Engineer additions (raw source layer 9 tables, staging transformations, column type reference). `docs/data_profile.json` used as evidence base. |
 | REQ-064.1 | `docs/testing_guide.md` | Data Engineer | complete | — | Yes | Created at `docs/testing_guide.md`. Covers all 10 staging + 7 mart models with per-column test evidence from `docs/data_profile.json`. Singular test calibration rationale. Known omissions (mostly unavailable, 2 pair tests removed). Failure interpretation guide. Deviation: proportion tests omitted (metaplane fork constraint — see changelog 2026-03-18). |
 

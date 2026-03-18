@@ -39,8 +39,11 @@ RAW_TABLE_SPECS = [
 )
 def meltano_ingest(context: AssetExecutionContext):
     # tap-csv used instead of tap-spreadsheets-anywhere — see changelog 2026-03-14.
+    # --env-file ../.env loads repo-root .env directly so BIGQUERY_RAW_DATASET and
+    # other vars are available regardless of how Dagster was started (with or without
+    # launch_dagster.sh). cwd is meltano/, so ../ resolves to repo root.
     result = subprocess.run(
-        ["meltano", "run", "tap-csv", "target-bigquery"],
+        ["meltano", "--env-file", "../.env", "run", "tap-csv", "target-bigquery"],
         cwd=Path(__file__).parent.parent.parent / "meltano",
         capture_output=True,
         text=True,
