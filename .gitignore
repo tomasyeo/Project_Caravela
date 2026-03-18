@@ -57,11 +57,7 @@ logs/
 output/
 .claude/
 directives/
-scripts/launch_agent.sh
-scripts/wrap_up_agent.sh
-scripts/final_cleanup.sh
-scripts/precheck.sh
-scripts/start_pipeline.sh
+scripts_agents/
 
 # Temporary working files (orchestration drafts, not committed)
 tmp/
