@@ -100,10 +100,12 @@ This report documents the rationale behind each tool selection and the schema de
 | **Decision** | Notebooks — exploratory + reproducible analytical workflow |
 
 **Rationale:**
-- **Separation of concerns**: Four notebooks serve distinct purposes — `00_eda.ipynb` (exploratory, no output), `01_sales_analysis.ipynb`, `02_customer_analysis.ipynb`, `03_geo_seller_analysis.ipynb` (each exports Parquet files). Notebooks are self-contained with no cross-notebook variable dependencies.
-- **BigQuery connection**: `google.cloud.bigquery.Client` via `GOOGLE_APPLICATION_CREDENTIALS` environment variable. Queries target the `olist_analytics` mart tables (star schema), not raw or staging tables. `sqlalchemy-bigquery` was considered but the native client offers a simpler API (`client.query(sql).to_dataframe()`) with fewer dependencies.
-- **Parquet export**: Each analytical notebook exports pre-computed DataFrames to `data/*.parquet`. This decouples the dashboard from BigQuery — the Streamlit dashboard reads committed Parquet files and requires no database credentials.
-- **Visualisation**: Plotly Express for all analytical notebooks and dashboard pages. Seaborn/matplotlib used only in `00_eda.ipynb` for exploratory plots.
+- **Separation of concerns**: Four notebooks serve distinct purposes — `00_eda.ipynb` (exploratory, no output), `01_sales_analysis.ipynb`, `02_customer_analysis.ipynb`, `03_geo_seller_analysis.ipynb` (each exports Parquet files). Notebooks are self-contained with no cross-notebook variable dependencies. Each analytical notebook opens with a markdown cell referencing relevant EDA findings, creating a narrative chain without variable coupling.
+- **BigQuery connection**: `google.cloud.bigquery.Client` via `GOOGLE_APPLICATION_CREDENTIALS` environment variable. Queries target the `olist_analytics` mart tables (star schema), not raw or staging tables. `sqlalchemy-bigquery` was considered but the native client offers a simpler API (`client.query(sql).to_dataframe()`) with fewer dependencies and no SQLAlchemy dialect version conflicts.
+- **Parquet-as-contract**: Each analytical notebook exports pre-computed DataFrames to `data/*.parquet`. This decouples the dashboard from BigQuery entirely — the Streamlit dashboard reads committed Parquet files and requires no GCP credentials. The 6 Parquet schemas form a versioned downstream contract for the dashboard engineer (see Section 5.5).
+- **`generate_parquet.py` fallback**: `scripts/generate_parquet.py` replicates all 6 Parquet exports without requiring Jupyter. This enables grader setup in a single command (`python scripts/generate_parquet.py --project <gcp_project_id>`) without opening notebooks. All schemas are kept in sync with notebook outputs.
+- **Observation window**: All trend analyses use Jan 2017 – Aug 2018 (20 months). 2016-11/12 (0–1 orders) and 2018-09/10 (16/4 orders) are excluded as data cut artefacts. 2016 orders are retained only in RFM customer history to correctly compute Recency for customers who last purchased in 2016.
+- **Visualisation**: Plotly Express for all analytical notebooks and dashboard pages — interactive charts render natively in Jupyter and in Streamlit via `st.plotly_chart()`. Seaborn/matplotlib used only in `00_eda.ipynb` for exploratory distribution plots (histograms, heatmaps) where interactivity is not required.
 
 ### 2.6 Dashboard — Streamlit
 
@@ -232,6 +234,7 @@ The mart layer has deliberate test coverage decisions that reflect data realitie
 | Streamlit | 1.55.0 | Multi-page architecture |
 | Plotly | 6.5.0 | All analytical + dashboard charts |
 | pandas | 2.3.3 | Data manipulation |
+| numpy | 2.2.5 | Concentration analysis helpers in `notebooks/utils.py` (Lorenz curve, Gini, HHI) |
 | google-cloud-bigquery | 3.40.1 | BigQuery Python client (used by all notebooks + `generate_parquet.py`) |
 
 **Credentials and configuration**: All tools read from the repo root `.env` file, but via different mechanisms — each tool has its own loading path:
@@ -254,7 +257,112 @@ The four `.env` variables:
 
 ---
 
-## 5. References
+## 5. Analytical Methodology
+
+This section documents the key analytical design decisions made during notebook implementation. These decisions are not derivable from the dbt schema alone — they represent explicit choices about how to interpret, segment, and present the data for stakeholder consumption.
+
+### 5.1 Observation Window — Jan 2017 to Aug 2018
+
+**Decision**: All trend analyses (GMV, NPS, cancellation rate, delivery performance) are scoped to 2017-01 through 2018-08 inclusive.
+
+**Rationale:**
+
+| Period | Orders | Reason excluded |
+|---|---|---|
+| 2016-11 | 0 | Data cut artefact — no orders |
+| 2016-12 | 1 | Insufficient volume; distorts seasonality |
+| 2018-09 | 16 | Data cut artefact — pipeline cut mid-month |
+| 2018-10 | 4 | Data cut artefact — pipeline cut early |
+
+Including these edge periods would produce spurious troughs and peaks at the boundaries of every trend chart. The observation window is applied consistently via a SQL `WHERE` clause in each notebook query — not as a post-hoc filter on the exported Parquet.
+
+**Exception — RFM Recency**: 2016 orders are retained in customer history. A customer whose last purchase was in 2016 has a legitimately high Recency value (many days since last order) and should be assigned a low R-score. Excluding 2016 entirely would misclassify these customers as new rather than lapsed.
+
+### 5.2 RFM Segmentation Design
+
+**Reference date**: `2018-08-31` — hardcoded, not `CURRENT_DATE` or `MAX(order_purchase_timestamp)`. Using `CURRENT_DATE` would change segment assignments every time the notebook is re-run. Using `MAX(timestamp)` would shift the reference point if the data cut changes. A fixed date produces reproducible, comparable results across runs and reviewers.
+
+**Frequency tier design**: 3 tiers (F1=1 order, F2=2 orders, F3=3+ orders) instead of quintiles.
+
+Quintile scoring collapses when the distribution is highly skewed. In this dataset, 96.9% of customers have exactly 1 order. A quintile-based F-score would assign F1 to all single-order customers regardless of percentile rank, and F2–F5 would cover the remaining 3.1% — producing a 5-tier scale that is functionally a 2-tier scale with arbitrary internal boundaries. Three explicit tiers reflect the actual business reality (one-time, repeat, loyal) without false precision.
+
+**Segment assignment (RF-only)**:
+
+| Segment | R-score | F-tier | Business interpretation |
+|---|---|---|---|
+| Champions | 4–5 | F3 | Recent + frequent — highest-value active customers |
+| Loyal | 3–5 | F2–F3 | Returning customers with good recency |
+| Promising | 4–5 | F1 | Recent first-time buyers — nurture for repeat purchase |
+| At Risk | 1–2 | F2–F3 | Previously frequent, now lapsed — win-back candidates |
+| High Value Lost | 1–2 | F3 | High-frequency, long-absent — priority win-back |
+| Hibernating | 1–3 | F1 | Distant single-purchase — low re-engagement probability |
+
+Monetary score (M-score, quintile 1–5) is stored in `customer_rfm.parquet` as a display attribute for the grouped bar chart but does not drive segment assignment. RF-only assignment produces segments that are collectively exhaustive — every R/F combination is covered by exactly one segment when priority ordering is applied: more specific segments (Champions, High Value Lost) take precedence over their broader parent definitions (Loyal, At Risk). For example, a customer with R=5 and F-tier=F3 satisfies both Champions (R4–5, F3) and Loyal (R3–5, F2–F3); they are assigned Champions. This priority is implemented as a SQL `CASE WHEN` ordered from most-specific to least-specific.
+
+**Repeat purchase rate**: Computed as the share of `customer_unique_id` values with `frequency >= 2`. Expected value ~3.1% — confirming the marketplace's single-purchase dominant behaviour (ASMP-022). Displayed as a `st.metric()` KPI card in the dashboard.
+
+### 5.3 NPS Proxy and Review Analysis
+
+**NPS proxy scoring**:
+- Detractor: review_score 1–2
+- Passive: review_score 3
+- Promoter: review_score 4–5
+- NPS = (% promoters) − (% detractors)
+
+This mapping approximates the standard Net Promoter Score methodology using the 1–5 ordinal scale available in the dataset. It is a proxy — no explicit "would recommend" survey question was asked. The NPS trend line complements the raw score distribution bar chart by reducing 5 categories to a single scalar for stakeholders who are familiar with NPS benchmarks.
+
+**Delay×review correlation — 5 bins**:
+
+| Bin | Definition | Purpose |
+|---|---|---|
+| `early` | delivered < estimated | Captures positive surprise effect — early delivery correlates with higher scores |
+| `on-time` | delivered = estimated (0 days late) | Baseline |
+| `1–3d late` | 1–3 days past estimate | Mild delay |
+| `4–7d late` | 4–7 days past estimate | Moderate delay |
+| `7+d late` | >7 days past estimate | Severe delay |
+
+The `early` bin is deliberately included. An analysis starting from "on-time or late" would miss the insight that customers receiving orders before the estimated date give materially higher scores — a finding with direct operational value (tighter delivery estimates → more early deliveries → better NPS).
+
+### 5.4 Concentration Analysis (Lorenz / Gini / HHI)
+
+Beyond the 11 core BRD metrics, the notebooks compute revenue concentration metrics to quantify market structure:
+
+| Metric | Scope | Finding |
+|---|---|---|
+| Gini coefficient | Seller GMV distribution | ~0.78 — high concentration; top 20% of sellers generate ~80% of GMV |
+| Gini coefficient | Seller GMV by month (temporal) | Tracks whether seller concentration increases or decreases over time |
+| Gini coefficient | Customer monetary spend | ~0.48 — moderate concentration |
+| Gini coefficient | Category revenue | ~0.71 — top categories disproportionately dominate revenue |
+| HHI (Herfindahl-Hirschman Index) | Seller GMV, customer spend, category revenue | Sum of squared market share fractions; complements Gini with a single-number market concentration measure |
+| CR4 / CR10 | All dimensions | Cumulative revenue share of top 4 and top 10 entities |
+
+These metrics are exported to `data/concentration_metrics.parquet` (83 rows). The file has a `dimension × group_key` structure: each row represents one dimension (e.g., `seller_gmv`, `seller_gmv_monthly`, `customer_monetary`, `category_revenue`, `category_seller_gmv`) at one aggregation level (e.g., `overall`, `2017-01`, a specific category name). Lorenz curves in the dashboard plot the cumulative share of entities (x-axis) against cumulative value share (y-axis), with the 45° equality line as reference — one curve per dimension.
+
+**Rationale for inclusion**: The 80/20 seller concentration finding is a high-signal insight for marketplace operators — it determines seller acquisition strategy and risk exposure. Standard bar charts (top N sellers) convey ranking but not structural inequality. A Gini coefficient and Lorenz curve communicate the full distribution shape in a single number and plot.
+
+### 5.5 Parquet Schema Contract
+
+The 6 Parquet files exported by the analytical notebooks form a versioned contract for the dashboard layer. Schema stability is enforced by keeping `generate_parquet.py` in sync with notebook exports. The contract is summarised below for downstream reference:
+
+| File | Granularity | Rows (est.) | Key columns |
+|---|---|---|---|
+| `sales_orders.parquet` | Order-item | ~112k | `order_id`, `order_item_id`, `product_category_name_english`, `date_key`, `year`, `month`, `order_status`, `total_sale_amount`, `primary_payment_type`, `primary_payment_installments`, `customer_region` |
+| `customer_rfm.parquet` | Customer | ~96k | `customer_unique_id`, `customer_state`, `customer_region`, `recency_days`, `frequency`, `monetary_value`, `r_score`, `f_tier`, `m_score`, `segment` |
+| `satisfaction_summary.parquet` | Order | ~97k | `order_id`, `review_score`, `nps_category`, `delivery_delay_days`, `delay_bin`, `year`, `month`, `customer_region`, `primary_product_category` |
+| `geo_delivery.parquet` | State × month | ~535 | `customer_state`, `region`, `year`, `month`, `total_orders`, `on_time_orders`, `on_time_rate`, `avg_delay_days` |
+| `seller_performance.parquet` | Seller | ~3k | `seller_id`, `seller_state`, `seller_region`, `gmv`, `order_count`, `avg_review_score`, `cancellation_rate` |
+| `concentration_metrics.parquet` | Dimension × group | 83 | `dimension`, `group_key`, `gini`, `cr4`, `cr10`, `hhi`, `n_entities`, `top_20pct_share` |
+
+**Design notes**:
+- `primary_payment_type` and `primary_payment_installments` in `sales_orders.parquet` use `payment_sequential=1` per order. ~3% of orders use split payments — this is an acceptable approximation for payment distribution analysis.
+- `primary_product_category` in `satisfaction_summary.parquet` is the category of the highest-revenue item per order. Approximate for ~10% multi-item orders.
+- `geo_delivery.parquet` includes `year` and `month` columns — required for the Date Range filter on the Geographic dashboard page.
+- `seller_performance.parquet` has no date dimension — full-period aggregation only. The dashboard displays a static "Jan 2017 – Aug 2018" label above the seller section.
+- All `*_region` columns are derived from `notebooks/utils.py:REGION_MAP` — single source of truth, no drift between files.
+
+---
+
+## 6. References
 
 - Architecture Decision Records: `docs/decisions/ADR-001` through `ADR-004`
 - Source data profile: `docs/data_profile.json`
