@@ -50,7 +50,7 @@ plugins:
     config:
       project: $GCP_PROJECT_ID
       credentials_path: $GOOGLE_APPLICATION_CREDENTIALS
-      dataset: olist_raw
+      dataset: $BIGQUERY_RAW_DATASET
       method: batch_job
       denormalized: false
       generate_view: true
