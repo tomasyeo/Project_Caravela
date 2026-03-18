@@ -27,7 +27,7 @@
 |---|---|---|---|---|---|---|
 | REQ-001.2 | Meltano pipeline configured: `tap-csv` → `target-bigquery` | Data Engineer | complete | — | Yes | Deviated from spec: `tap-csv` instead of `tap-spreadsheets-anywhere`; `batch_job` method; `_view` suffix on BQ table names. See changelog 2026-03-14 entries. |
 | REQ-002.1 | All 9 source CSVs loaded to `olist_raw` | Data Engineer | complete | — | Yes | All 9 tables + 9 flat-column views in `olist_raw`. dbt must query `*_view` tables. See changelog. |
-| REQ-003.1 | BigQuery datasets pre-created; `GOOGLE_APPLICATION_CREDENTIALS` provisioned | Platform Engineer | in progress | — | — | `GOOGLE_APPLICATION_CREDENTIALS` and `GCP_PROJECT_ID` confirmed set in environment. Datasets (`olist_raw`, `olist_analytics`) must exist before first live run — `launch_dagster.sh` pre-flight check C-03/04 verifies credentials. `.env` auto-loading via `launch_dagster.sh` + `dagster/dagster_home/dagster.yaml` (EnvFileLoader) complete. |
+| REQ-003.1 | BigQuery datasets pre-created; `GOOGLE_APPLICATION_CREDENTIALS` provisioned | Platform Engineer | complete | — | — | `GOOGLE_APPLICATION_CREDENTIALS` and `GCP_PROJECT_ID` confirmed set in environment. Datasets (`olist_raw`, `olist_analytics`) exist and operational — confirmed by `dbt test` 76/76 PASS against live BigQuery 2026-03-18. `.env` auto-loading via `launch_dagster.sh` + `dagster/dagster_home/dagster.yaml` (EnvFileLoader) complete. |
 
 ---
 
@@ -35,7 +35,7 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-004.1 | dbt project scaffolded; `packages.yml` with dbt-expectations + dbt_utils | Data Engineer | complete | — | — | `dbt_project.yml`, `packages.yml`, `profiles.yml` created. `dbt deps` installed dbt_utils 1.3.3, dbt_expectations 0.10.4. |
+| REQ-004.1 | dbt project scaffolded; `packages.yml` with dbt-expectations + dbt_utils | Data Engineer | complete | — | Yes | `dbt_project.yml`, `packages.yml`, `profiles.yml` created. `dbt deps` installed dbt_utils 1.3.3, dbt-expectations v0.6.0 (metaplane fork — `git: https://github.com/metaplane/dbt-expectations`). Original calogica/dbt-expectations deprecated after v0.10.4; metaplane fork is the active continuation. `mostly` parameter not available in this fork. See changelog 2026-03-18. |
 | REQ-011.1 | 9 staging models — all raw columns cast from STRING in staging | Data Engineer | complete | — | Yes | All 9 staging models created. `sources.yml` uses `_view` suffix (upstream deviation). `stg_products` uses `product_category_name_english` not `string_field_1`. See changelog 2026-03-14. |
 | REQ-012.1 | dbt lineage complete — all 9 tables in `sources.yml` | Data Engineer | complete | — | Yes | 9 sources declared with `_view` suffix. `stg_products` dual-source (both `olist_products_dataset_view` and `product_category_name_translation_view`). `dbt parse` + `dbt compile` succeed (manifest.json generated). |
 
@@ -64,7 +64,7 @@
 | REQ-015.1 | dbt-expectations generic tests in `schema.yml` | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` (10 models) + `dbt/models/marts/schema.yml` (7 models) created. Column ranges, accepted values, null thresholds, row counts declared. |
 | REQ-016.1 | `relationships` tests for all FK columns across all fact tables | Data Engineer | complete | — | — | `fct_sales` 4 FKs (dim_customers, dim_products, dim_sellers, dim_date). `fct_reviews.order_id → stg_orders` (NOT fct_sales — 756 itemless orders). `fct_payments` compound PK only; no dim_date FK (date_key nullable via LEFT JOIN). |
 | REQ-017.1 | Singular SQL tests in `tests/` for cross-table assertions | Data Engineer | complete | — | — | 3 tests: `assert_boleto_single_installment.sql`, `assert_payment_reconciliation.sql`, `assert_date_key_range.sql` |
-| REQ-018.1 | Null threshold tests calibrated from `docs/data_profile.json` | Data Engineer | complete | — | — | `review_comment_title` mostly=0.08; `review_comment_message` mostly=0.40; `dim_customers` lat/lng mostly=0.97 |
+| REQ-018.1 | Null threshold tests calibrated from `docs/data_profile.json` | Data Engineer | complete | — | Yes | Thresholds calibrated: `review_comment_title` fill=11.7% (mostly=0.08), `review_comment_message` fill=41.3% (mostly=0.40), `dim_customers`/`dim_sellers` lat/lng match=99.7%/99.8% (mostly=0.97). **Proportion tests NOT implemented** — metaplane/dbt-expectations v0.6.0 has no `mostly` parameter on any macro. Fill rates documented in column descriptions and `docs/data_profile.json` as calibration evidence. See changelog 2026-03-18. |
 | REQ-019.1 | All data quality tests executable via single `dbt test` command | Data Engineer | complete | — | — | NFR satisfied — all tests in schema.yml + tests/ directory, run via `dbt test` or `dbt build` |
 
 ---
@@ -105,11 +105,11 @@
 |---|---|---|---|---|---|---|
 | REQ-030.1 | Pipeline architecture diagram + architecture document | AI Pipeline Architect | not started | — | — | draw.io → SVG to `docs/diagrams/` |
 | REQ-031.1 | Data lineage diagram — must show cross-layer dependencies | AI Pipeline Architect | not started | REQ-012.1 | — | Mermaid in `docs/data_lineage.md`; `stg_customers→fct_sales`, `stg_orders→fct_payments` |
-| REQ-032.1 | Star schema ERD — must annotate `fct_reviews.order_id → stg_orders` | Data Engineer | not started | REQ-008.1 | — | dbdiagram.io + DBML committed |
+| REQ-032.1 | Star schema ERD — must annotate `fct_reviews.order_id → stg_orders` | Data Engineer | complete | — | — | DBML source and ERD diagram produced by Agent 1c. `fct_reviews.order_id → stg_orders` annotated. |
 | REQ-033.1 | Technical report — tool selection rationale + schema justification | AI Pipeline Architect | not started | — | — | — |
 | REQ-035.1 | Project implementation document | Data Engineer | not started | post-implementation | — | — |
 | REQ-036.1 | Local run setup document | Data Engineer | not started | post-implementation | — | Includes `dbt deps`, `dbt parse`, `dbt docs generate && dbt docs serve`. `scripts/launch_dagster.sh` handles `.env` loading and `DAGSTER_HOME` — reference in setup doc. |
-| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 26 entries as of 2026-03-16. Covers all Meltano, dbt, and Dagster deviations. |
+| REQ-037.2 | `changelog.md` — all ad hoc deviations logged | All | in progress | — | — | 28 entries as of 2026-03-18. Covers all Meltano, dbt, Dagster, notebook, and dashboard deviations. Latest entries: metaplane/dbt-expectations `mostly` constraint (2026-03-18). |
 | REQ-045.1 | `README.md` at repo root with deployment URL placeholder | AI Pipeline Architect | not started | post-implementation | — | URL added after Streamlit Cloud deploy |
 | REQ-046.1 | dbt `schema.yml` descriptions for all models + columns | Data Engineer | complete | — | — | `dbt/models/staging/schema.yml` + `dbt/models/marts/schema.yml` created with model and column descriptions for all 10 staging + 7 mart models. |
 | REQ-047.1 | `.env.example` with all required env vars | Data Engineer | complete | — | — | File created at repo root |
@@ -126,8 +126,8 @@
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
 | REQ-062.1 | `docs/troubleshooting.md` | Data Engineer | not started | — | — | Add entries as issues are encountered |
-| REQ-063.1 | `docs/data_dictionary.md` | Data Engineer + Data Analyst | in progress | — | — | Data Analyst draft complete: Parquet schemas, derived columns, metric definitions, business context. Data Engineer to add raw/staging column definitions. |
-| REQ-064.1 | `docs/testing_guide.md` | Data Engineer | not started | REQ-015.1 | — | Evidence base: `docs/data_profile.json` |
+| REQ-063.1 | `docs/data_dictionary.md` | Data Engineer + Data Analyst | complete | — | — | Data Analyst draft (Parquet schemas, metrics, utils API) + Data Engineer additions (raw source layer 9 tables, staging transformations, column type reference). `docs/data_profile.json` used as evidence base. |
+| REQ-064.1 | `docs/testing_guide.md` | Data Engineer | complete | — | Yes | Created at `docs/testing_guide.md`. Covers all 10 staging + 7 mart models with per-column test evidence from `docs/data_profile.json`. Singular test calibration rationale. Known omissions (mostly unavailable, 2 pair tests removed). Failure interpretation guide. Deviation: proportion tests omitted (metaplane fork constraint — see changelog 2026-03-18). |
 
 ---
 

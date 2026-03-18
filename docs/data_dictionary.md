@@ -1,15 +1,19 @@
 # Data Dictionary — Project Caravela
 
-> **Scope**: Parquet export files in `data/` and key analytical columns.
-> This document covers business definitions, derivation logic, and interpretation guidance
-> for columns produced by the analysis layer (Jupyter notebooks / `scripts/generate_parquet.py`).
+> **Scope**: Full pipeline column reference — raw source layer, staging layer, mart layer, and Parquet
+> export files. Covers business definitions, BigQuery types, derivation logic, data defects, and
+> interpretation guidance across all layers.
 >
-> For BigQuery mart and staging column definitions, see dbt `schema.yml` files:
+> **Data Analyst sections**: Parquet file schemas (`data/`), derived column definitions, metric
+> definitions, `notebooks/utils.py` API reference.
+>
+> **Data Engineer sections**: Raw source tables (`olist_raw` — 9 views), staging transformations
+> (`stg_*` — 9 models), mart layer column definitions (`dim_*` / `fct_*` — 7 models), star schema
+> relationship diagram.
+>
+> For machine-readable column constraints and dbt test declarations, see:
 > - `dbt/models/staging/schema.yml`
 > - `dbt/models/marts/schema.yml`
->
-> **Data Analyst sections**: Parquet schemas, derived columns, metric definitions, business context.
-> **Data Engineer sections** *(TODO)*: Raw source columns, staging transformations, mart column descriptions.
 
 ---
 
@@ -266,3 +270,334 @@ All colour palettes and mappings are defined once in `notebooks/utils.py` and im
 | `gini_coefficient(values)` | function | Gini via trapezoidal Lorenz area |
 | `hhi(values)` | function | Herfindahl-Hirschman Index × 10,000 |
 | `concentration_summary(values, name)` | function | Full suite: gini, cr4, cr10, hhi, top_20pct_share |
+
+---
+
+## Raw Source Layer (`olist_raw` dataset)
+
+All 9 raw tables are loaded by Meltano (`tap-csv → target-bigquery`). Every column arrives as STRING — no type inference is performed. All casts are the sole responsibility of the dbt staging layer.
+
+**Important:** `target-bigquery` with `denormalized: false` stores data in base tables (with a `data` JSON column) and creates flat-column views with a `_view` suffix. dbt queries the `*_view` tables. Do not query base tables directly.
+
+### `olist_customers_dataset_view`
+
+| Column | Raw Type | Description |
+|---|---|---|
+| `customer_id` | STRING | Order-scoped customer identifier. One row per order — same customer placing multiple orders gets a different `customer_id` each time. FK target: `stg_orders.customer_id` |
+| `customer_unique_id` | STRING | True customer PK — consistent across repeat purchases. 96,096 distinct values from 99,441 rows. |
+| `customer_zip_code_prefix` | STRING | 5-digit zip code prefix (padded). Used for geolocation join in `dim_customers`. |
+| `customer_city` | STRING | Customer city name (free text, Brazilian Portuguese). |
+| `customer_state` | STRING | 2-letter Brazilian state code (e.g., SP, RJ, MG). Always present. |
+
+### `olist_orders_dataset_view`
+
+| Column | Raw Type | Description | Nulls |
+|---|---|---|---|
+| `order_id` | STRING | PK. Unique order identifier. 99,441 rows, all distinct. | 0 |
+| `customer_id` | STRING | FK to `olist_customers_dataset_view.customer_id`. | 0 |
+| `order_status` | STRING | Order lifecycle status. 8 values: delivered (96,478), shipped, canceled, unavailable, invoiced, processing, created, approved. | 0 |
+| `order_purchase_timestamp` | STRING | When the order was placed. Cast: `TIMESTAMP`. Always present — used as `date_key` for fact FK joins. | 0 |
+| `order_approved_at` | STRING | When payment was approved. Cast: `SAFE_CAST AS TIMESTAMP` (blank cells → NULL). | 160 blank |
+| `order_delivered_carrier_date` | STRING | When the order was handed to the carrier. Cast: `SAFE_CAST AS TIMESTAMP`. | 1,783 blank |
+| `order_delivered_customer_date` | STRING | When the customer received the order. Cast: `SAFE_CAST AS TIMESTAMP`. | 2,965 blank |
+| `order_estimated_delivery_date` | STRING | Seller-provided estimated delivery date. Cast: `SAFE_CAST AS TIMESTAMP`. | small number blank |
+
+**Note on blank handling**: `tap-csv` encodes blank CSV cells as `''`, not NULL. `SAFE_CAST('' AS TIMESTAMP)` returns NULL silently. `CAST('' AS TIMESTAMP)` raises a BigQuery error. All nullable timestamp columns use `SAFE_CAST`.
+
+### `olist_order_items_dataset_view`
+
+| Column | Raw Type | Description | Nulls |
+|---|---|---|---|
+| `order_id` | STRING | FK to `olist_orders_dataset_view.order_id`. | 0 |
+| `order_item_id` | STRING | Item sequence within order (1-based). Cast: `INT64`. | 0 |
+| `product_id` | STRING | FK to `olist_products_dataset_view.product_id`. | 0 |
+| `seller_id` | STRING | FK to `olist_sellers_dataset_view.seller_id`. | 0 |
+| `shipping_limit_date` | STRING | Deadline for seller to ship. Cast: `TIMESTAMP`. | 0 |
+| `price` | STRING | Item unit price (R$). Cast: `FLOAT64`. Min 0.85, max 6,735. | 0 |
+| `freight_value` | STRING | Freight cost allocated to this item (R$). Cast: `FLOAT64`. Min 0.0. | 0 |
+
+**Granularity note**: 112,650 rows. 98,666 distinct order_ids — 9,803 orders have multiple items. 775 orders in `olist_orders_dataset_view` have no rows here (itemless orders: 603 unavailable, 164 canceled, etc.).
+
+### `olist_order_payments_dataset_view`
+
+| Column | Raw Type | Description | Defects |
+|---|---|---|---|
+| `order_id` | STRING | FK to `olist_orders_dataset_view.order_id`. | 0 |
+| `payment_sequential` | STRING | Payment sequence within order (1-based). Cast: `INT64`. Compound PK component. | 0 |
+| `payment_type` | STRING | Payment method. Source values: credit_card (76,795), boleto (19,784), voucher (5,775), debit_card (1,529), not_defined (3). | DEF-004: 3 `not_defined` rows filtered in `stg_payments` |
+| `payment_installments` | STRING | Number of installments. Cast: `INT64`. Source range: 0–24. | DEF-005: 2 credit_card rows with installments=0, clamped to 1 in `stg_payments` via `GREATEST(..., 1)` |
+| `payment_value` | STRING | Payment amount (R$). Cast: `FLOAT64`. Range: 0.0–13,664. | DEF-006: 6 zero-value vouchers — legitimate, not filtered |
+
+### `olist_order_reviews_dataset_view`
+
+| Column | Raw Type | Description | Defects / Notes |
+|---|---|---|---|
+| `review_id` | STRING | Review identifier. **Not unique in source** — 789 duplicate values. Deduplicated in `stg_reviews` via `ROW_NUMBER()`. | DEF-001 |
+| `order_id` | STRING | FK to `olist_orders_dataset_view.order_id`. Not unique — 547 orders have multiple reviews. | — |
+| `review_score` | STRING | Customer score. Cast: `INT64`. Source values: 1–5 only. | 0 |
+| `review_comment_title` | STRING | Optional short title. Blank cells loaded as `''` (not NULL). ~88.3% blank. | tap-csv encoding |
+| `review_comment_message` | STRING | Optional review body. Blank cells loaded as `''` (not NULL). ~58.7% blank. | tap-csv encoding |
+| `review_creation_date` | STRING | When the review was created. Cast: `TIMESTAMP`. Used as `date_key` in `fct_reviews`. | 0 |
+| `review_answer_timestamp` | STRING | When the review was answered. Cast: `TIMESTAMP`. Used as tiebreaker in deduplication. | 0 |
+
+**Row count**: 99,224 source rows. After dedup: ~98,435 rows in `stg_reviews` and `fct_reviews`.
+
+### `olist_products_dataset_view`
+
+| Column | Raw Type | Description | Defects / Notes |
+|---|---|---|---|
+| `product_id` | STRING | PK. 32,951 rows, all distinct. | 0 |
+| `product_category_name` | STRING | Portuguese category name. Blank (not NULL) for 610 products. **Do not use for analysis** — use `product_category_name_english` from `dim_products`. | DEF-003 |
+| `product_name_lenght` | STRING | ⚠️ Misspelled source column. Character count of product name. Cast: `SAFE_CAST AS INT64`. Blank for 610 products. Renamed to `product_name_length` in `stg_products`. | DEF-009 |
+| `product_description_lenght` | STRING | ⚠️ Misspelled source column. Character count of description. Same handling. Renamed to `product_description_length`. | DEF-009 |
+| `product_photos_qty` | STRING | Number of product photos. Cast: `INT64`. | Blank for 610 |
+| `product_weight_g` | STRING | Product weight in grams. Cast: `FLOAT64`. | 2 blank |
+| `product_length_cm` | STRING | Product length in cm. Cast: `FLOAT64`. | 2 blank |
+| `product_height_cm` | STRING | Product height in cm. Cast: `FLOAT64`. | 2 blank |
+| `product_width_cm` | STRING | Product width in cm. Cast: `FLOAT64`. | 2 blank |
+
+### `olist_sellers_dataset_view`
+
+| Column | Raw Type | Description |
+|---|---|---|
+| `seller_id` | STRING | PK. 3,095 rows, all distinct. |
+| `seller_zip_code_prefix` | STRING | 5-digit zip code prefix. Used for geolocation join in `dim_sellers`. |
+| `seller_city` | STRING | Seller city name. |
+| `seller_state` | STRING | 2-letter Brazilian state code. |
+
+### `olist_geolocation_dataset_view`
+
+| Column | Raw Type | Description | Notes |
+|---|---|---|---|
+| `geolocation_zip_code_prefix` | STRING | 5-digit zip code prefix. Cast: `STRING` (preserved as-is — leading zeros matter). | 19,015 distinct prefixes after dedup |
+| `geolocation_lat` | STRING | Latitude. Cast: `FLOAT64`. Source range: -36.6 to +45.1. | DEF-002: 29 rows outside Brazil bounds, filtered in `stg_geolocation` |
+| `geolocation_lng` | STRING | Longitude. Cast: `FLOAT64`. Source range: -101.5 to +121.1. | DEF-002: 37 rows outside Brazil bounds, filtered in `stg_geolocation` |
+| `geolocation_city` | STRING | City name (not used in downstream models). | — |
+| `geolocation_state` | STRING | State code (not used in downstream models — zip prefix used for join). | — |
+
+**Size**: 1,000,163 rows — largest source file by a significant margin. Aggregated to 19,015 rows in `stg_geolocation` via `GROUP BY zip_code_prefix` after bounding-box filter.
+
+### `product_category_name_translation_view`
+
+| Column | Raw Type | Description | Notes |
+|---|---|---|---|
+| `product_category_name` | STRING | Portuguese category name (lookup key). 71 rows. | UTF-8 BOM in source file — handled transparently by tap-csv |
+| `product_category_name_english` | STRING | English translation. | 2 untranslated categories: `pc_gamer`, `portateis_cozinha_e_preparadores_de_alimentos` |
+
+---
+
+## Staging Layer (`olist_analytics` dataset — `stg_*` prefix)
+
+Staging models perform all type casting, defect corrections, deduplication, and renaming. Mart models (`dim_*`, `fct_*`) must reference staging models via `ref()`, not raw sources directly.
+
+### Key Staging Transformations
+
+| Model | Primary Transformations |
+|---|---|
+| `stg_customers` | Cast all columns from STRING. Pass-through — no defects. |
+| `stg_orders` | Cast all columns. `SAFE_CAST` for 4 nullable timestamps. Derive `date_key` as `DATE(CAST(order_purchase_timestamp AS TIMESTAMP))`. |
+| `stg_order_items` | Cast all columns. `order_item_id` cast to INT64. Pass-through otherwise. |
+| `stg_payments` | Cast all columns. Filter `payment_type = 'not_defined'` (DEF-004). Clamp `payment_installments` to min 1 via `GREATEST(CAST(...), 1)` (DEF-005). |
+| `stg_reviews` | Cast all columns. Deduplicate on `review_id` via `ROW_NUMBER() OVER (PARTITION BY review_id ORDER BY review_answer_timestamp DESC)`, keep rn=1 (DEF-001). Derive `date_key`. |
+| `stg_products` | Cast all columns with `SAFE_CAST`. Rename `product_name_lenght → product_name_length` and `product_description_lenght → product_description_length` (DEF-009). Join `product_category_name_translation_view` for English names. COALESCE: `CASE WHEN TRIM(IFNULL(english, '')) = '' THEN NULL ELSE english END` → Portuguese → `'uncategorized'` (DEF-003). |
+| `stg_geolocation` | Filter `lat BETWEEN -35 AND 5 AND lng BETWEEN -75 AND -34` (DEF-002). `GROUP BY zip_code_prefix`, `AVG(lat)`, `AVG(lng)`. Produces 1 row per zip prefix. |
+| `stg_sellers` | Cast all columns. Pass-through — no defects. |
+| `stg_product_category_name_translation` | Pass-through from `product_category_name_translation_view`. Source for `stg_products` COALESCE join. |
+
+### Staging Column Types (post-cast)
+
+All staging models expose columns in their final analytical types. The staging layer is the only place in the pipeline where STRING → typed casts occur. Downstream models (`dim_*`, `fct_*`) do not perform additional casts.
+
+| Column type | Cast pattern | SAFE_CAST used? |
+|---|---|---|
+| Timestamps (required) | `CAST(col AS TIMESTAMP)` | No — failure means bad source data |
+| Timestamps (nullable) | `SAFE_CAST(col AS TIMESTAMP)` | Yes — blank CSV cell → NULL, not error |
+| Integer IDs | `CAST(col AS INT64)` | For sequential IDs where blank is impossible |
+| Nullable integers | `SAFE_CAST(col AS INT64)` | For dimension attributes (product lengths, weights) |
+| Float amounts | `CAST(col AS FLOAT64)` | For price, freight — always present |
+| String keys | No cast (remain STRING) | customer_id, product_id, order_id, etc. |
+
+---
+
+## dbt Mart Layer (`olist_analytics` dataset — `dim_*` / `fct_*` prefix)
+
+Mart models are the analytical Gold layer. They reference only staging models via `ref()` — never raw sources directly. Dimensions deduplicate and enrich staging; facts join across dimensions to produce the analytical grain consumed by notebooks and the dashboard.
+
+---
+
+### `dim_customers`
+
+**PK**: `customer_unique_id`
+**Grain**: One row per unique customer (deduped from `stg_customers` which has one row per order)
+**Sources**: `stg_customers` LEFT JOIN `stg_geolocation` on `customer_zip_code_prefix = zip_code_prefix`
+**Row count**: ~96,096
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `customer_unique_id` | STRING | True customer PK — consistent across repeat purchases | 96,096 distinct values. `customer_id` (order-scoped) is NOT exposed here. |
+| `customer_city` | STRING | Customer's registered city | Free text, Brazilian Portuguese |
+| `customer_state` | STRING | 2-letter Brazilian state code | e.g., SP, RJ, MG. Always present. |
+| `customer_zip_code_prefix` | STRING | 5-digit zip code prefix | Join key to `stg_geolocation`. Leading zeros preserved (STRING, not INT). |
+| `geolocation_lat` | FLOAT64 | Latitude of customer zip centroid | **NULLABLE** — ~0.3% of zip prefixes have no geolocation match (LEFT JOIN). Within Brazil bounds (−35 to +5). |
+| `geolocation_lng` | FLOAT64 | Longitude of customer zip centroid | **NULLABLE** — same match rate as lat. Within Brazil bounds (−75 to −34). |
+
+**Warning**: `customer_unique_id` vs `customer_id` — `stg_customers` has one row per `customer_id` (order-scoped). A single customer making 3 orders has 3 distinct `customer_id` values but 1 `customer_unique_id`. `dim_customers` deduplicates using `ROW_NUMBER() OVER (PARTITION BY customer_unique_id ORDER BY customer_id)` — only the first `customer_id` row is retained.
+
+---
+
+### `dim_products`
+
+**PK**: `product_id`
+**Grain**: One row per product
+**Source**: `stg_products`
+**Row count**: 32,951
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `product_id` | STRING | Product PK | 32,951 distinct values, all unique |
+| `product_category_name_english` | STRING | English category name (primary analytical column) | COALESCE(english → Portuguese fallback → `'uncategorized'`). NEVER NULL. 610 products are `'uncategorized'`. **Always use this column** — `product_category_name` (Portuguese, not exposed in mart) has 610 blank-string entries that silently produce an empty-string bucket. |
+| `product_name_length` | INT64 | Character count of product name | **NULLABLE** — blank for 610 uncategorized products. Correctly spelled (source has `product_name_lenght` — renamed in `stg_products`). |
+| `product_description_length` | INT64 | Character count of product description | **NULLABLE** — blank for 610 uncategorized products. Correctly spelled (source has `product_description_lenght` — renamed in `stg_products`). |
+| `product_photos_qty` | INT64 | Number of product photos | **NULLABLE** — blank for 610 products |
+| `product_weight_g` | FLOAT64 | Product weight in grams | **NULLABLE** — 2 products blank in source |
+| `product_length_cm` | FLOAT64 | Product length in cm | **NULLABLE** — 2 products blank in source |
+| `product_height_cm` | FLOAT64 | Product height in cm | **NULLABLE** — 2 products blank in source |
+| `product_width_cm` | FLOAT64 | Product width in cm | **NULLABLE** — 2 products blank in source |
+
+**COALESCE guard detail**: `stg_products` uses `CASE WHEN TRIM(IFNULL(english_name, '')) = '' THEN NULL ELSE english_name END` before COALESCE — this converts both NULL and empty-string `''` to NULL so the COALESCE fallback chain fires correctly for the 2 untranslated categories (`pc_gamer`, `portateis_cozinha_e_preparadores_de_alimentos`).
+
+---
+
+### `dim_sellers`
+
+**PK**: `seller_id`
+**Grain**: One row per seller
+**Sources**: `stg_sellers` LEFT JOIN `stg_geolocation` on `seller_zip_code_prefix = zip_code_prefix`
+**Row count**: 3,095
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `seller_id` | STRING | Seller PK | 3,095 distinct values, all unique |
+| `seller_city` | STRING | Seller's registered city | Free text |
+| `seller_state` | STRING | 2-letter Brazilian state code | Always present |
+| `seller_zip_code_prefix` | STRING | 5-digit zip code prefix | Join key to `stg_geolocation`. Leading zeros preserved (STRING). |
+| `geolocation_lat` | FLOAT64 | Latitude of seller zip centroid | **NULLABLE** — ~0.2% of seller zips have no geolocation match |
+| `geolocation_lng` | FLOAT64 | Longitude of seller zip centroid | **NULLABLE** — same rate as lat |
+
+---
+
+### `dim_date`
+
+**PK**: `date_key`
+**Grain**: One row per calendar day
+**Source**: Generated via `dbt_utils.date_spine` macro (no staging model input)
+**Row count**: 1,096 (2016-01-01 to 2018-12-31 inclusive)
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `date_key` | DATE | Calendar date (PK) | Direct output of `dbt_utils.date_spine`. Range: 2016-01-01 to 2018-12-31. FK target for all three fact tables. |
+| `year` | INT64 | Calendar year | `EXTRACT(YEAR FROM date_key)`. Values: 2016, 2017, 2018. |
+| `month` | INT64 | Calendar month (1–12) | `EXTRACT(MONTH FROM date_key)` |
+| `day` | INT64 | Day of month (1–31) | `EXTRACT(DAY FROM date_key)` |
+| `day_of_week` | INT64 | Day of week (1–7) | `EXTRACT(DAYOFWEEK FROM date_key)`. **BigQuery convention: 1 = Sunday, 7 = Saturday** — not ISO 8601 (where 1 = Monday). |
+| `quarter` | INT64 | Calendar quarter (1–4) | `EXTRACT(QUARTER FROM date_key)` |
+
+**Fact table `date_key` derivation**:
+- `fct_sales`: `DATE(SAFE_CAST(order_purchase_timestamp AS TIMESTAMP))` from `stg_orders`
+- `fct_reviews`: `DATE(CAST(review_creation_date AS TIMESTAMP))` from `stg_reviews`
+- `fct_payments`: `DATE(SAFE_CAST(order_purchase_timestamp AS TIMESTAMP))` from `stg_orders` (via explicit CTE)
+
+---
+
+### `fct_sales`
+
+**Compound PK**: (`order_id`, `order_item_id`)
+**Grain**: One row per order item
+**Sources**: `stg_order_items` → JOIN `stg_orders` (on `order_id`) → JOIN `stg_customers` (on `customer_id`)
+**Row count**: ~112,650
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `order_id` | STRING | Order identifier (PK component) | FK to `dim_date` (via `date_key`). 98,666 distinct orders. |
+| `order_item_id` | INT64 | Item sequence within order (PK component) | 1-based. Combined with `order_id` → unique row. |
+| `product_id` | STRING | FK → `dim_products.product_id` | Always present |
+| `seller_id` | STRING | FK → `dim_sellers.seller_id` | Always present |
+| `customer_unique_id` | STRING | FK → `dim_customers.customer_unique_id` | Resolved via three-source CTE: `stg_order_items.order_id → stg_orders.customer_id → stg_customers.customer_unique_id`. Direct join from `stg_order_items` to `stg_customers` produces NULL — they share no key. |
+| `date_key` | DATE | FK → `dim_date.date_key` | `DATE(SAFE_CAST(order_purchase_timestamp AS TIMESTAMP))`. Uses SAFE_CAST: blank purchase timestamps → NULL (rare but possible). |
+| `order_status` | STRING | Order lifecycle status | 8 values: delivered (~96.8%), shipped, canceled, unavailable, invoiced, processing, created, approved |
+| `price` | FLOAT64 | Item unit price (R$) | Excludes freight. Min 0.85. |
+| `freight_value` | FLOAT64 | Freight cost allocated to this item (R$) | Min 0.0 (free shipping promotions) |
+| `total_sale_amount` | FLOAT64 | `price + freight_value` | Item-level revenue. Sum across items for order total; sum across orders for GMV. **FLOAT64 precision**: use `ROUND(..., 2)` for currency display — IEEE 754 drift can produce values like 149.99999999998. |
+| `order_delivered_customer_date` | TIMESTAMP | When the customer received the order | **NULLABLE** — NULL for ~3% of orders (undelivered, canceled, in transit). Order-level attribute repeated across all items of the same order. |
+| `order_estimated_delivery_date` | TIMESTAMP | Seller-provided estimated delivery date | **NULLABLE** — small number of orders have no estimate. Order-level attribute — same caveat as above. |
+
+**COUNT trap**: `order_delivered_customer_date` and `order_estimated_delivery_date` repeat across all items of the same order. Always use `COUNT(DISTINCT order_id)` for delivery rate calculations, NOT `COUNT(*)`.
+
+**Excluded column**: `order_payment_value` is deliberately absent. It is an order-level aggregate — joining it onto item-level rows causes double-counting proportional to item count per order. Use `fct_payments` for payment analysis.
+
+---
+
+### `fct_reviews`
+
+**PK**: `review_id`
+**Grain**: One row per deduplicated review
+**Source**: `stg_reviews` (deduplication performed in staging — 789 duplicate `review_id` values resolved via `ROW_NUMBER()`)
+**Row count**: ~98,435
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `review_id` | STRING | Review PK | Unique after dedup. NOT unique in source (`stg_reviews` handles dedup). |
+| `order_id` | STRING | FK → **`stg_orders.order_id`** (NOT `fct_sales.order_id`) | **Cross-boundary FK** — 756 orders have reviews but no items in `fct_sales` (itemless orders: canceled, unavailable). A FK test targeting `fct_sales` would fail for these 756 orders. NOT unique in `fct_reviews` — 547 orders have 2+ reviews with distinct `review_id` values. |
+| `review_score` | INT64 | Customer review score (1–5) | Ordinal — do not treat as continuous. Bar chart (not histogram). |
+| `review_comment_title` | STRING | Optional short review title | `''` (empty string) for ~88.3% of reviews — tap-csv encodes blank cells as `''`, not NULL. Filter with `NULLIF(review_comment_title, '')` for text analysis. |
+| `review_comment_message` | STRING | Optional review body text | `''` for ~58.7% of reviews — same empty-string encoding. |
+| `date_key` | DATE | FK → `dim_date.date_key` | `DATE(CAST(review_creation_date AS TIMESTAMP))`. Uses CAST (not SAFE_CAST) — `review_creation_date` is always present in source. |
+| `review_answer_timestamp` | TIMESTAMP | When the seller/platform answered the review | Used as tiebreaker in `stg_reviews` deduplication (keep latest answer). Always present. |
+
+---
+
+### `fct_payments`
+
+**Compound PK**: (`order_id`, `payment_sequential`)
+**Grain**: One row per payment record (an order may have multiple payment methods)
+**Sources**: `stg_payments` LEFT JOIN `stg_orders` (on `order_id`)
+**Row count**: ~103,883 (after `not_defined` filter in staging)
+
+| Column | BigQuery Type | Description | Notes |
+|---|---|---|---|
+| `order_id` | STRING | Order identifier (PK component) | An order can have multiple rows (split payments). |
+| `payment_sequential` | INT64 | Payment sequence within order (PK component) | 1-based. `payment_sequential = 1` is the primary payment method. |
+| `payment_type` | STRING | Payment method | 4 values post-filter: `credit_card` (~74%), `boleto` (~19%), `voucher` (~6%), `debit_card` (~1%). `not_defined` filtered in `stg_payments`. |
+| `payment_installments` | INT64 | Number of installments | Min 1 (clamped in `stg_payments` via `GREATEST(..., 1)` — 2 credit_card rows had 0 installments). Boleto is always 1. Credit card range: 1–24. |
+| `payment_value` | FLOAT64 | Payment amount (R$) | Min 0.0 (zero-value vouchers are valid). Range 0.0–13,664. |
+| `date_key` | DATE | FK → `dim_date.date_key` | Derived from `stg_orders.order_purchase_timestamp` (not in `stg_payments`). **NULLABLE** — rare orders in `stg_payments` have no matching row in `stg_orders` (LEFT JOIN). No FK test on `date_key` in schema.yml by design. |
+
+**DAG dependency note**: `fct_payments` includes an explicit `ref('stg_orders')` CTE even though `stg_orders` only provides `date_key`. Without this explicit reference, dbt's DAG omits the `stg_orders → fct_payments` edge, breaking Dagster's execution order guarantees and lineage visibility.
+
+**Reconciliation**: For single-installment orders, `SUM(fct_payments.payment_value)` per order should equal `SUM(fct_sales.total_sale_amount)` within R$20.00. Multi-installment orders are excluded — Olist's `payment_value` includes credit card parcelamento interest, which legitimately exceeds price+freight. The R$20.00 threshold covers 13 known freight-subsidy anomalies (max diff R$16.50). See `tests/assert_payment_reconciliation.sql` and changelog 2026-03-15.
+
+---
+
+## Star Schema Relationships
+
+```
+                    ┌──────────────┐
+                    │  dim_date    │
+                    │  (date_key)  │
+                    └──────┬───────┘
+                           │ FK (date_key)
+          ┌────────────────┼─────────────────┐
+          │                │                 │
+   ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
+   │  fct_sales  │  │ fct_reviews │  │fct_payments │
+   │ (order_id + │  │ (review_id) │  │ (order_id + │
+   │order_item_id│  │             │  │payment_seq) │
+   └──┬──┬──┬───┘  └──────┬──────┘  └─────────────┘
+      │  │  │             │
+      │  │  │             └── order_id → stg_orders ⚠️
+      │  │  │                 (NOT fct_sales — 756 itemless orders)
+      │  │  │
+      │  │  └── seller_id ──────────→ dim_sellers (seller_id)
+      │  └───── product_id ─────────→ dim_products (product_id)
+      └───────── customer_unique_id → dim_customers (customer_unique_id)
+```
