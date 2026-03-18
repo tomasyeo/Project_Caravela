@@ -111,15 +111,99 @@ This report documents the rationale behind each tool selection and the schema de
 
 | Criterion | Decision |
 |---|---|
-| **Selected** | Streamlit with multi-page architecture |
+| **Selected** | Streamlit 1.55 with multi-page `st.navigation()` architecture |
 | **Alternatives considered** | Looker, Metabase, Dash (Plotly), custom React app |
 | **Decision** | Streamlit — Python-native, rapid prototyping, zero frontend build step |
 
 **Rationale:**
-- **Architecture**: Thin entry point (`dashboard.py`) with `st.navigation()` routing to 4 page files under `pages/`. Data loading via `@st.cache_data` decorators in `dashboard_utils.py`. Shared constants (region map, colour palettes) imported from `notebooks/utils.py`.
-- **Data source**: Parquet files in `data/` — no live BigQuery connection. This means the dashboard can run independently on any machine with Python, without GCP credentials.
-- **4 global filters**: Date Range, Product Category, Customer State, Customer Region. Filter applicability varies by page (e.g., RFM section uses a fixed reference date, not the date range filter). Inapplicable filters show `st.caption()` explanatory notes.
-- **Choropleth maps**: `data/brazil_states.geojson` committed to repo. `featureidkey="properties.sigla"` matches 2-letter state codes. No runtime fetch required.
+- **No credentials required**: The dashboard reads committed Parquet files from `streamlit/data/` — no BigQuery connection, no GCP credentials. Any machine with Python can run it. This was a deliberate architectural constraint that drove the Parquet export design in the analytical notebooks.
+- **Streamlit Cloud deployment**: All dashboard files are co-located under `streamlit/` (entry point, utilities, pages, data). `streamlit/dashboard.py` is the Cloud app entry point. Path resolution uses `Path(__file__).parent` for data files and `Path(__file__).parent.parent` for `notebooks/utils.py` (repo root) — relative to the source file, not the launch directory.
+
+**File structure:**
+
+```
+streamlit/
+  dashboard.py          ← thin entry point: page config + st.navigation() only
+  dashboard_utils.py    ← @st.cache_data loaders + filter helpers + sidebar renderer
+  requirements.txt      ← pinned dependencies for Streamlit Cloud
+  data/
+    *.parquet           ← 6 Parquet files (copied from repo root data/)
+    brazil_states.geojson
+  pages/
+    1_Executive.py      ← Executive Overview (4 tabs)
+    2_Products.py       ← Product Performance (3 tabs)
+    3_Geographic.py     ← Geographic Analysis (3 tabs)
+    4_Customers.py      ← Customer Analysis (4 tabs)
+    5_Glossary.py       ← Searchable glossary (17 terms, no charts)
+```
+
+**Architecture patterns:**
+
+- **Thin entry point**: `dashboard.py` contains only `st.set_page_config()` and `st.navigation()`. No data loading, no charts, no imports beyond `streamlit`. This prevents the entry point from becoming a maintenance surface as pages evolve.
+- **Shared loaders with caching**: `dashboard_utils.py` exposes 6 `@st.cache_data` loaders (one per Parquet file + GeoJSON). Cache persists across page navigations within a session — each Parquet file is read from disk exactly once.
+- **Constant imports from `notebooks/utils.py`**: Colour palettes (`REGION_COLOURS`, `SEGMENT_COLOURS`, `STATUS_COLOURS`) and the `add_region()` helper are imported from the single canonical source. This prevents colour drift between notebooks and dashboard — a change to `notebooks/utils.py` propagates everywhere.
+- **Tab layout**: Each analysis page uses `st.tabs()` with one focused narrative per tab. Tabs share the same filtered dataset; switching tabs does not re-apply or reset filters. This pattern avoids the cognitive load of a single page with too many unrelated charts.
+
+**Filter design — 4 global filters in sidebar:**
+
+| Filter | Session State Key | Default | Widget type |
+|---|---|---|---|
+| Date Range | `date_start`, `date_end` | Jan 2017 – Aug 2018 | `st.date_input` |
+| Product Category | `category_filter` | `[]` (all) | `st.multiselect` |
+| State | `state_filter` | `[]` (all) | `st.multiselect` |
+| Region | `region_filter` | `[]` (all) | `st.multiselect` |
+
+`init_filters()` is called at the top of every page to initialise session state keys before any widget reads them. Empty list = show all — this is the semantic contract enforced by the `apply_filters()` helper.
+
+**Filter applicability per section — inapplicable filters remain visible with `st.caption()` notes:**
+
+| Filter | Executive | Products | Geo (delivery) | Geo (sellers) | Customers (RFM) | Customers (satisfaction) |
+|---|---|---|---|---|---|---|
+| Date Range | ✓ | ✓ | ✓ | ✗ full period | ✗ fixed ref date | ✓ |
+| Product Category | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ approx |
+| State | ✓ | ✓ | ✓ | ✓ seller home | ✓ | ✓ |
+| Region | ✓ | ✓ | ✓ | ✓ seller home | ✓ | ✓ |
+
+Hiding inapplicable filters was rejected — it creates surprising behaviour when a user sets a filter, navigates, and the filter silently disappears. Caption notes explain the constraint without removing the control.
+
+**Non-obvious implementation decisions:**
+
+1. **Item-granularity deduplication**: `sales_orders.parquet` is at order-item grain (~112k rows). Computing order-level metrics (AOV, on-time rate, payment distribution) requires `drop_duplicates("order_id")` before aggregation. Without this, an order with 3 items is counted 3 times — inflating AOV and distorting payment type shares. Every page that uses `sales_orders` makes this deduplication explicit at load time.
+
+2. **`geo_delivery.parquet` column naming**: The delivery Parquet uses column `region` (not `customer_region`). A dedicated `apply_geo_filters()` function handles this difference and also performs date filtering via integer year-month comparison (`year * 100 + month`) rather than a `date_key` column (which `geo_delivery` does not have).
+
+3. **Plotly categorical axis annotation**: `fig.add_vline(x="2017-11", annotation_text=...)` fails with `TypeError: unsupported operand type(s) for +: 'int' and 'str'` when the x-axis is categorical strings. Plotly internally computes `sum(x_values) / len(x_values)` to position the annotation; `sum(["2017-01", ...])` starts with `0 + "2017-01"` which raises the error. Fix: replaced with `fig.add_shape(type="line", xref="x", ...)` + `fig.add_annotation(xref="x", ...)` which accept string x-values directly. Applied to the Black Friday 2017 annotation on the Sales Trend tab.
+
+4. **Multiselect session state ownership**: Using both `default=st.session_state.key` and `st.session_state.key = st.multiselect(...)` creates a double-rerun bug where the second click in a multiselect is silently dropped (Streamlit re-renders the widget with the stale default before the new value is written back). Fix: use `key=` parameter only — Streamlit manages the session state sync automatically. The `default=` parameter is never set.
+
+5. **Reset button callback order**: Directly assigning `st.session_state.category_filter = []` in the script body after a keyed multiselect is instantiated raises `StreamlitAPIException` — keyed widgets own their session state key and block external mutation after rendering. Fix: use `on_click=_reset` callback, which executes in the pre-script phase before widget instantiation.
+
+6. **RFM heatmap reindex ordering**: Building the pivot with `.reindex(index=[5,4,3,2,1], columns=["F1","F2","F3"])` must happen *before* `.fillna(0).astype(int)`. If reindex follows fillna/astype, reindex reintroduces NaN into an int64 array, which silently downcasts to float64 and renders as "nan" in the cell text.
+
+7. **NaN guard on NPS metric**: When the filtered dataset is too small to compute NPS, `nps_score` is `float("nan")`. The conditional `nps_score >= 0` evaluates `False` for NaN, falling to the else branch and rendering `"nan"` as a string. Fix: `pd.isna(nps_score)` guard before the comparison.
+
+8. **Simpson's Paradox on on-time rate**: On-time rate is computed as `sum(on_time_orders) / sum(total_orders)` across filtered `geo_delivery` rows — not as an average of pre-computed per-state rates. Averaging pre-computed rates without weighting by volume gives disproportionate influence to states with few orders. The weighted aggregate is the correct denominator.
+
+9. **`st.plotly_chart` width**: `use_container_width=True` was deprecated in Streamlit 1.55 in favour of `width="stretch"`. All 30 `st.plotly_chart` calls across the 4 analysis pages use `width="stretch"`.
+
+**Choropleth map:**
+- GeoJSON: `data/brazil_states.geojson` — committed to repo, loaded once via `@st.cache_data` as a Python dict.
+- `featureidkey="properties.sigla"` — confirmed against the GeoJSON feature properties; matches the 2-letter state codes (`"SP"`, `"RJ"`, etc.) in all Parquet files.
+- No runtime HTTP fetch — the file is local, ensuring the map renders without network access.
+
+**Page content summary:**
+
+| Page | Tabs | Key charts |
+|---|---|---|
+| Executive Overview | Sales Trend · Revenue & AOV · Payment Mix · Order Health | GMV area + order count bar (stacked panels); AOV line + payment type bar; payment type donut + instalment histogram; cancellation rate line + order status donut |
+| Product Performance | Revenue Rankings · Category Concentration · Freight Impact | Horizontal bar + treemap (top-N slider); Lorenz curve + Gini/HHI/CR4/CR10 KPI cards; freight-to-price ratio bar |
+| Geographic Analysis | Market Map · Delivery Performance · Seller Analysis | Choropleth (GMV by state) + region bar; on-time rate bar + delay bar + region×month heatmap; scatter (GMV vs score) + Pareto curve + quality tier treemap + monthly Gini trend |
+| Customer Analysis | RFM Segments · Segment Playbook · Satisfaction & NPS · Delivery Impact | Grouped bar (avg R/F/M per segment) + RFM heatmap; segment action cards; review score bar + avg score line + NPS stacked bar + NPS trend line; delay-bin bar + box plot |
+| Glossary | — | Searchable expanders (17 terms across 7 categories); no charts |
+
+**Lorenz curve and concentration metrics** (Product Performance — Category Concentration tab): `lorenz_curve()` and `gini_coefficient()` are imported directly from `notebooks/utils.py` and applied to the filtered revenue series. The Gini and HHI interpretive caption is dynamic — it adjusts its language based on whether HHI is above or below the 1,500 competitive-concentration threshold.
+
+**Seller quality tiers** (Geographic Analysis — Seller Analysis tab): Quality tier classification (`Premium`, `Good`, `Average`, `At Risk`) is applied at render time using a row-wise function on the filtered seller DataFrame, using thresholds from the BRD (≥10 orders; score ≥ 4.0 + cancel ≤ 2% for Premium, etc.). This avoids pre-computing tiers in the Parquet file, keeping tier definitions in one place.
 
 ---
 
