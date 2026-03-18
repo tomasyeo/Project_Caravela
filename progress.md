@@ -135,7 +135,7 @@
 
 | REQ-ID | Description | Owner | Status | Blocked By | Deviation | Notes |
 |---|---|---|---|---|---|---|
-| REQ-066.1 | `docs/executive_brief.md` — narrative source for NotebookLM slide generation | Data Scientist | not started | REQ-022.1; REQ-055.1–058.1 | — | Write after all 3 analytical notebooks complete; 1,500–2,500 words |
+| REQ-066.1 | `docs/executive_brief.md` — narrative source for NotebookLM slide generation | Data Scientist | complete | — | — | 2,177 words. All 11 metrics referenced with specific figures from Parquet-verified data. 9 sections, 5 strategic recommendations, 3 risks (1 technical + 2 business). |
 | REQ-038.1 | Executive slide deck (Google Slides → `.pptx` in `docs/`) | Data Scientist | not started | REQ-066.1 | — | NotebookLM workflow: Google Doc → NotebookLM → Google Slides → polish → export |
 | REQ-039.1 | Executive summary slide (≤3 min) | Data Scientist | not started | REQ-038.1 | — | — |
 | REQ-040.1 | Technical solution overview slide | Data Scientist | not started | REQ-038.1 | — | References REQ-030.1 architecture diagram |
