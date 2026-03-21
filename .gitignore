@@ -64,3 +64,4 @@ tmp/
 
 # Streamlit cache
 .streamlit/
+notebooks/04_agent_performance_analysis copy.ipynb
