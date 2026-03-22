@@ -58,6 +58,8 @@ output/
 .claude/
 directives/
 scripts_agents/
+prompts/
+research/
 
 # Temporary working files (orchestration drafts, not committed)
 tmp/
