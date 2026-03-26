@@ -1,4 +1,7 @@
 # Project Caravela — Olist E-Commerce Analytics Pipeline
+"The caravel — caravela in Portuguese — was the sailing vessel that carried Portugal and Brazil into the Age of Discovery. We are doing the same with Brazilian commerce data. The name is earned" - Claude Opus
+
+---
 
 End-to-end data pipeline for the [Brazilian E-Commerce Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) (~100k orders, 2016–2018). Ingests 9 CSV source files into BigQuery, transforms them through a star-schema data warehouse with dbt, orchestrates execution with Dagster, analyses the data in Jupyter notebooks, and presents insights through a Streamlit dashboard.
 
